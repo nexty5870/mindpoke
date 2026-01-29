@@ -26,95 +26,99 @@ interface InterestGraphProps {
   onSelectInterest: (id: string | null) => void;
 }
 
-// Custom node component for interests
+// Custom Cyber-Serif node component
 function InterestNode({ data, selected }: NodeProps) {
   const interest = data.interest as Interest;
   const heatLevel = data.heatLevel as number;
   const discoveryCount = data.discoveryCount as number;
 
-  const getHeatColor = (level: number) => {
-    if (level >= 4) return "from-orange-500 via-red-500 to-pink-500";
-    if (level >= 3) return "from-yellow-500 via-orange-500 to-red-500";
-    if (level >= 2) return "from-green-500 via-yellow-500 to-orange-500";
-    return "from-blue-500 via-cyan-500 to-green-500";
-  };
-
   return (
     <motion.div
       initial={{ scale: 0, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      whileHover={{ scale: 1.05 }}
-      className={cn(
-        "relative cursor-pointer",
-        selected && "z-10"
-      )}
+      className={cn("relative cursor-pointer", selected && "z-10")}
     >
       <Handle type="target" position={Position.Top} className="opacity-0" />
       <Handle type="source" position={Position.Bottom} className="opacity-0" />
       
-      {/* Glow effect */}
-      <div
-        className={cn(
-          "absolute inset-0 rounded-2xl blur-xl opacity-30 transition-opacity",
-          `bg-gradient-to-br ${getHeatColor(heatLevel)}`,
-          selected && "opacity-50"
-        )}
-      />
-      
-      {/* Main card */}
-      <div
-        className={cn(
-          "relative px-6 py-4 rounded-2xl border transition-all",
-          "bg-zinc-900/90 backdrop-blur-sm",
-          selected
-            ? "border-violet-500 shadow-lg shadow-violet-500/20"
-            : "border-zinc-700 hover:border-zinc-600"
-        )}
-      >
-        {/* Heat bars */}
-        <div className="flex gap-1 mb-2 justify-center">
-          {[...Array(5)].map((_, i) => (
-            <motion.div
-              key={i}
-              initial={{ height: 0 }}
-              animate={{ height: i < heatLevel ? 12 : 8 }}
-              transition={{ delay: i * 0.1 }}
-              className={cn(
-                "w-1.5 rounded-full",
-                i < heatLevel
-                  ? `bg-gradient-to-t ${getHeatColor(heatLevel)}`
-                  : "bg-zinc-700"
-              )}
-            />
-          ))}
+      {/* ASCII Corner Frame */}
+      <div className={cn(
+        "relative border transition-none",
+        selected 
+          ? "border-[#00d4aa] bg-[#0a0a0f]" 
+          : "border-[#2a2a30] bg-[#111113] hover:border-[#3a3a40]"
+      )}>
+        {/* Top corners */}
+        <span className={cn(
+          "absolute -top-[1px] -left-[1px] font-terminal text-[10px]",
+          selected ? "text-[#00d4aa]" : "text-[#2a2a30]"
+        )}>┌</span>
+        <span className={cn(
+          "absolute -top-[1px] -right-[1px] font-terminal text-[10px]",
+          selected ? "text-[#00d4aa]" : "text-[#2a2a30]"
+        )}>┐</span>
+        {/* Bottom corners */}
+        <span className={cn(
+          "absolute -bottom-[1px] -left-[1px] font-terminal text-[10px]",
+          selected ? "text-[#00d4aa]" : "text-[#2a2a30]"
+        )}>└</span>
+        <span className={cn(
+          "absolute -bottom-[1px] -right-[1px] font-terminal text-[10px]",
+          selected ? "text-[#00d4aa]" : "text-[#2a2a30]"
+        )}>┘</span>
+
+        <div className="px-6 py-4">
+          {/* Heat bars */}
+          <div className="flex gap-[2px] mb-3 justify-center">
+            {[...Array(5)].map((_, i) => (
+              <motion.div
+                key={i}
+                initial={{ height: 0 }}
+                animate={{ height: i < heatLevel ? 16 : 8 }}
+                transition={{ delay: i * 0.05 }}
+                className={cn(
+                  "w-[4px]",
+                  i < heatLevel
+                    ? "bg-gradient-to-t from-[#ffb000] to-[#00d4aa]"
+                    : "bg-[#2a2a30]"
+                )}
+              />
+            ))}
+          </div>
+
+          {/* Name - Serif font */}
+          <h3 className={cn(
+            "font-serif text-lg text-center font-semibold mb-1",
+            selected ? "text-white" : "text-[#e6e6e6]"
+          )}>
+            {interest.name}
+          </h3>
+
+          {/* Metadata - Terminal font */}
+          <div className="font-terminal text-[10px] text-[#555555] text-center">
+            PRI:{interest.priority} | ENG:{interest.engagementCount}
+          </div>
+
+          {/* Discovery count badge */}
+          {discoveryCount > 0 && (
+            <div className="flex items-center justify-center gap-1 mt-2 font-terminal text-[10px]">
+              <span className="w-2 h-2 bg-[#ffb000]" />
+              <span className="text-[#ffb000]">{discoveryCount} NEW</span>
+            </div>
+          )}
         </div>
 
-        {/* Name */}
-        <h3 className="font-semibold text-center text-white mb-1">
-          {interest.name}
-        </h3>
-
-        {/* Discovery count */}
-        {discoveryCount > 0 && (
-          <div className="flex items-center justify-center gap-1 text-xs text-zinc-400">
-            <span className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
-            {discoveryCount} new
-          </div>
-        )}
-
-        {/* Priority badge */}
-        <div
-          className={cn(
-            "absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold",
-            interest.priority >= 5
-              ? "bg-red-500 text-white"
-              : interest.priority >= 4
-              ? "bg-orange-500 text-white"
-              : interest.priority >= 3
-              ? "bg-yellow-500 text-black"
-              : "bg-zinc-600 text-white"
-          )}
-        >
+        {/* Priority badge - top right */}
+        <div className={cn(
+          "absolute -top-3 -right-3 w-6 h-6 flex items-center justify-center font-terminal text-[10px] border bg-[#0a0a0f]",
+          interest.priority >= 5
+            ? "border-[#ff4444] text-[#ff4444]"
+            : interest.priority >= 4
+            ? "border-[#ffb000] text-[#ffb000]"
+            : interest.priority >= 3
+            ? "border-[#00d4aa] text-[#00d4aa]"
+            : "border-[#2a2a30] text-[#888888]"
+        )}>
           {interest.priority}
         </div>
       </div>
@@ -137,7 +141,7 @@ export function InterestGraph({
     const positions: { x: number; y: number }[] = [];
     const centerX = 400;
     const centerY = 300;
-    const radius = Math.min(200, 100 + count * 30);
+    const radius = Math.min(220, 120 + count * 25);
 
     for (let i = 0; i < count; i++) {
       const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
@@ -182,7 +186,6 @@ export function InterestGraph({
     const edges: Edge[] = [];
     const connectionStrengths = new Map<string, number>();
 
-    // Calculate connection strength based on shared discoveries
     discoveries.forEach((discovery) => {
       const matched = discovery.matchedInterests;
       for (let i = 0; i < matched.length; i++) {
@@ -193,7 +196,6 @@ export function InterestGraph({
       }
     });
 
-    // Create edges
     connectionStrengths.forEach((strength, key) => {
       const [source, target] = key.split("-");
       edges.push({
@@ -201,18 +203,18 @@ export function InterestGraph({
         source,
         target,
         style: {
-          stroke: `rgba(139, 92, 246, ${Math.min(0.8, strength * 0.2)})`,
-          strokeWidth: Math.min(4, 1 + strength * 0.5),
+          stroke: `rgba(0, 212, 170, ${Math.min(0.6, strength * 0.15)})`,
+          strokeWidth: Math.min(3, 1 + strength * 0.3),
+          strokeDasharray: strength > 2 ? undefined : "4 4",
         },
-        animated: strength > 2,
       });
     });
 
     return edges;
   }, [discoveries]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, , onNodesChange] = useNodesState(initialNodes);
+  const [edges, , onEdgesChange] = useEdgesState(initialEdges);
 
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
@@ -222,7 +224,13 @@ export function InterestGraph({
   );
 
   return (
-    <div className="w-full h-full bg-zinc-950">
+    <div className="w-full h-full bg-[#0a0a0f] relative">
+      {/* Terminal header overlay */}
+      <div className="absolute top-4 left-4 z-10 font-terminal text-[10px] text-[#555555]">
+        <div>$ GRAPH_RENDER :: INTEREST_MAP</div>
+        <div className="text-[#00d4aa]">NODES: {interests.length} | EDGES: {edges.length}</div>
+      </div>
+
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -232,16 +240,16 @@ export function InterestGraph({
         nodeTypes={nodeTypes}
         fitView
         proOptions={{ hideAttribution: true }}
-        className="bg-zinc-950"
+        className="bg-[#0a0a0f]"
       >
         <Background
-          variant={BackgroundVariant.Dots}
-          gap={20}
+          variant={BackgroundVariant.Lines}
+          gap={40}
           size={1}
-          color="rgba(255, 255, 255, 0.05)"
+          color="rgba(42, 42, 48, 0.5)"
         />
         <Controls
-          className="bg-zinc-800 border-zinc-700 rounded-lg"
+          className="bg-[#111113] border border-[#2a2a30] [&>button]:bg-[#111113] [&>button]:border-[#2a2a30] [&>button]:text-[#888888] [&>button:hover]:bg-[#1a1a1f] [&>button:hover]:text-[#00d4aa]"
           showInteractive={false}
         />
       </ReactFlow>

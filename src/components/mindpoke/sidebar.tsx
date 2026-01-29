@@ -1,9 +1,8 @@
 "use client";
 
-import { Brain, Plus, Settings, Zap } from "lucide-react";
+import { Plus, Settings, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { Interest } from "@/types";
 
@@ -20,112 +19,145 @@ export function Sidebar({
   onSelectInterest,
   onAddInterest,
 }: SidebarProps) {
-  const getPriorityColor = (priority: number) => {
-    if (priority >= 5) return "bg-red-500/20 text-red-400";
-    if (priority >= 4) return "bg-orange-500/20 text-orange-400";
-    if (priority >= 3) return "bg-yellow-500/20 text-yellow-400";
-    return "bg-zinc-500/20 text-zinc-400";
-  };
-
   const getHeatLevel = (interest: Interest) => {
     const ratio = interest.engagementCount / (interest.engagementCount + interest.dismissCount + 1);
     return Math.round(ratio * 5);
   };
 
+  const formatTimestamp = () => {
+    return new Date().toISOString().split('T')[0];
+  };
+
   return (
-    <aside className="w-64 border-r border-zinc-800 bg-zinc-900/50 flex flex-col">
+    <aside className="w-72 border-r border-[#2a2a30] bg-[#111113] flex flex-col">
       {/* Logo */}
-      <div className="p-4 border-b border-zinc-800">
-        <div className="flex items-center gap-2">
-          <div className="p-2 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500">
-            <Brain className="w-5 h-5 text-white" />
+      <div className="p-4 border-b border-[#2a2a30]">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 border border-[#00d4aa] flex items-center justify-center font-terminal text-[#00d4aa] text-lg">
+            ⟁
           </div>
           <div>
-            <h1 className="font-semibold text-lg">Mindpoke</h1>
-            <p className="text-xs text-zinc-500">Poke your curiosity</p>
+            <h1 className="font-serif text-xl text-white tracking-tight">Mindpoke</h1>
+            <p className="text-[10px] font-terminal text-[#888888] tracking-wider">
+              SYS_VERSION::0.1.0
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Interests List */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="p-3 flex items-center justify-between">
-          <span className="text-sm font-medium text-zinc-400">Interests</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={onAddInterest}
-          >
-            <Plus className="w-4 h-4" />
-          </Button>
+      {/* System Status */}
+      <div className="px-4 py-3 border-b border-[#2a2a30] font-terminal text-[10px]">
+        <div className="flex items-center justify-between text-[#888888]">
+          <span>$ SYSTEM_STATUS</span>
+          <span className="text-[#00d4aa]">● ONLINE</span>
         </div>
+        <div className="text-[#555555] mt-1">
+          LAST_SYNC: {formatTimestamp()}
+        </div>
+      </div>
 
-        <ScrollArea className="flex-1 px-2">
-          <div className="space-y-1 pb-4">
-            {/* All Discoveries */}
-            <button
-              onClick={() => onSelectInterest(null)}
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors",
-                selectedInterest === null
-                  ? "bg-zinc-800 text-white"
-                  : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
-              )}
-            >
-              <Zap className="w-4 h-4" />
-              <span className="text-sm font-medium">All Discoveries</span>
-            </button>
+      {/* Module Header */}
+      <div className="px-4 py-3 flex items-center justify-between border-b border-[#2a2a30]">
+        <div>
+          <span className="font-terminal text-[10px] text-[#888888] tracking-wider">
+            ┌─ INTEREST_MODULES ─┐
+          </span>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 border border-[#2a2a30] hover:border-[#00d4aa] hover:bg-transparent"
+          onClick={onAddInterest}
+        >
+          <Plus className="w-4 h-4 text-[#00d4aa]" />
+        </Button>
+      </div>
 
-            {/* Individual Interests */}
-            {interests.map((interest) => (
+      {/* Interests List */}
+      <ScrollArea className="flex-1">
+        <div className="p-2 space-y-1">
+          {/* All Discoveries */}
+          <button
+            onClick={() => onSelectInterest(null)}
+            className={cn(
+              "w-full flex items-center gap-3 px-3 py-2 text-left transition-none border",
+              selectedInterest === null
+                ? "bg-[#1a1a1f] border-[#00d4aa] text-[#00d4aa]"
+                : "border-transparent text-[#888888] hover:text-[#e6e6e6] hover:bg-[#1a1a1f]"
+            )}
+          >
+            <Zap className="w-4 h-4" />
+            <div className="flex-1">
+              <span className="font-terminal text-xs">ALL_DISCOVERIES</span>
+            </div>
+          </button>
+
+          {/* Individual Interests */}
+          {interests.map((interest) => {
+            const heatLevel = getHeatLevel(interest);
+            return (
               <button
                 key={interest.id}
                 onClick={() => onSelectInterest(interest.id)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors group",
+                  "w-full flex items-center gap-3 px-3 py-3 text-left transition-none border group",
                   selectedInterest === interest.id
-                    ? "bg-zinc-800 text-white"
-                    : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+                    ? "bg-[#1a1a1f] border-[#00d4aa]"
+                    : "border-transparent hover:bg-[#1a1a1f] hover:border-[#2a2a30]"
                 )}
               >
-                {/* Heat indicator */}
-                <div className="flex gap-0.5">
+                {/* Heat indicator - vertical bars */}
+                <div className="flex gap-[2px]">
                   {[...Array(5)].map((_, i) => (
                     <div
                       key={i}
                       className={cn(
-                        "w-1 h-3 rounded-full transition-colors",
-                        i < getHeatLevel(interest)
-                          ? "bg-gradient-to-t from-orange-500 to-yellow-400"
-                          : "bg-zinc-700"
+                        "w-[3px] h-4 transition-none",
+                        i < heatLevel
+                          ? "bg-gradient-to-t from-[#ffb000] to-[#00d4aa]"
+                          : "bg-[#2a2a30]"
                       )}
                     />
                   ))}
                 </div>
-                <span className="text-sm font-medium flex-1 truncate">
-                  {interest.name}
-                </span>
-                <Badge
-                  variant="secondary"
-                  className={cn("text-xs", getPriorityColor(interest.priority))}
-                >
-                  {interest.priority}
-                </Badge>
-              </button>
-            ))}
-          </div>
-        </ScrollArea>
-      </div>
+                
+                <div className="flex-1 min-w-0">
+                  <span className={cn(
+                    "font-terminal text-xs block truncate",
+                    selectedInterest === interest.id ? "text-[#00d4aa]" : "text-[#e6e6e6]"
+                  )}>
+                    {interest.name.toUpperCase().replace(/\s+/g, '_')}
+                  </span>
+                  <span className="font-terminal text-[10px] text-[#555555]">
+                    PRI:{interest.priority} | ENG:{interest.engagementCount}
+                  </span>
+                </div>
 
-      {/* Settings */}
-      <div className="p-3 border-t border-zinc-800">
+                {/* Priority indicator */}
+                <div className={cn(
+                  "w-6 h-6 flex items-center justify-center font-terminal text-[10px] border",
+                  interest.priority >= 5
+                    ? "border-[#ff4444] text-[#ff4444]"
+                    : interest.priority >= 4
+                    ? "border-[#ffb000] text-[#ffb000]"
+                    : "border-[#2a2a30] text-[#888888]"
+                )}>
+                  {interest.priority}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </ScrollArea>
+
+      {/* Footer */}
+      <div className="p-3 border-t border-[#2a2a30]">
         <Button
           variant="ghost"
-          className="w-full justify-start text-zinc-400 hover:text-zinc-200"
+          className="w-full justify-start text-[#888888] hover:text-[#e6e6e6] hover:bg-transparent font-terminal text-xs"
         >
           <Settings className="w-4 h-4 mr-2" />
-          Settings
+          $ CONFIG_SETTINGS
         </Button>
       </div>
     </aside>

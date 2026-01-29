@@ -10,8 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { X, Plus, Sparkles } from "lucide-react";
+import { X, Plus, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Interest } from "@/types";
 
@@ -50,7 +49,6 @@ export function AddInterestDialog({ open, onOpenChange, onAdd }: AddInterestDial
       priority,
     });
 
-    // Reset form
     setName("");
     setDescription("");
     setKeywords([]);
@@ -66,62 +64,70 @@ export function AddInterestDialog({ open, onOpenChange, onAdd }: AddInterestDial
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-zinc-900 border-zinc-800">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-violet-400" />
-            Add New Interest
+      <DialogContent className="bg-[#111113] border border-[#2a2a30] max-w-lg">
+        {/* ASCII corners */}
+        <span className="absolute top-0 left-0 font-terminal text-[#2a2a30] text-xs">┌</span>
+        <span className="absolute top-0 right-0 font-terminal text-[#2a2a30] text-xs">┐</span>
+        <span className="absolute bottom-0 left-0 font-terminal text-[#2a2a30] text-xs">└</span>
+        <span className="absolute bottom-0 right-0 font-terminal text-[#2a2a30] text-xs">┘</span>
+
+        <DialogHeader className="border-b border-[#2a2a30] pb-4">
+          <div className="font-terminal text-[10px] text-[#555555] mb-2">
+            <Terminal className="w-3 h-3 inline mr-1" />
+            $ MODULE_INIT :: ADD_INTEREST
+          </div>
+          <DialogTitle className="font-serif text-xl text-white">
+            Initialize New Interest
           </DialogTitle>
-          <DialogDescription>
-            Tell Mindpoke what you&apos;re curious about. We&apos;ll find the best content for you.
+          <DialogDescription className="font-terminal text-xs text-[#888888]">
+            CONFIGURE_PARAMETERS :: Define topic scope for discovery engine
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+        <form onSubmit={handleSubmit} className="space-y-5 mt-4">
           {/* Name */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-300">
-              Interest Name
+            <label className="font-terminal text-[10px] text-[#888888] tracking-wider">
+              $ INTEREST_NAME
             </label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g., AI Agents"
-              className="bg-zinc-800 border-zinc-700"
+              className="bg-[#0a0a0f] border-[#2a2a30] font-terminal text-sm text-[#e6e6e6] placeholder:text-[#555555] focus:border-[#00d4aa]"
             />
           </div>
 
           {/* Description */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-300">
-              Description <span className="text-zinc-500">(optional)</span>
+            <label className="font-terminal text-[10px] text-[#888888] tracking-wider">
+              $ DESCRIPTION <span className="text-[#555555]">[OPTIONAL]</span>
             </label>
             <Input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="e.g., Autonomous AI systems and agent architectures"
-              className="bg-zinc-800 border-zinc-700"
+              className="bg-[#0a0a0f] border-[#2a2a30] font-terminal text-sm text-[#e6e6e6] placeholder:text-[#555555] focus:border-[#00d4aa]"
             />
           </div>
 
           {/* Keywords */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-300">
-              Keywords <span className="text-zinc-500">(for better matching)</span>
+            <label className="font-terminal text-[10px] text-[#888888] tracking-wider">
+              $ SEARCH_KEYWORDS
             </label>
             <div className="flex gap-2">
               <Input
                 value={keywordInput}
                 onChange={(e) => setKeywordInput(e.target.value)}
                 onKeyDown={handleKeywordKeyDown}
-                placeholder="Add keyword and press Enter"
-                className="bg-zinc-800 border-zinc-700"
+                placeholder="> add keyword..."
+                className="bg-[#0a0a0f] border-[#2a2a30] font-terminal text-sm text-[#e6e6e6] placeholder:text-[#555555] focus:border-[#00d4aa]"
               />
               <Button
                 type="button"
-                variant="secondary"
-                size="icon"
                 onClick={handleAddKeyword}
+                className="bg-transparent border border-[#2a2a30] hover:border-[#00d4aa] hover:bg-transparent text-[#00d4aa] px-3"
               >
                 <Plus className="w-4 h-4" />
               </Button>
@@ -129,15 +135,14 @@ export function AddInterestDialog({ open, onOpenChange, onAdd }: AddInterestDial
             {keywords.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {keywords.map((keyword) => (
-                  <Badge
+                  <span
                     key={keyword}
-                    variant="secondary"
-                    className="bg-zinc-800 hover:bg-zinc-700 cursor-pointer group"
                     onClick={() => handleRemoveKeyword(keyword)}
+                    className="inline-flex items-center gap-1 px-2 py-1 border border-[#2a2a30] font-terminal text-[10px] text-[#888888] cursor-pointer hover:border-[#ff4444] hover:text-[#ff4444] transition-none"
                   >
                     {keyword}
-                    <X className="w-3 h-3 ml-1 opacity-50 group-hover:opacity-100" />
-                  </Badge>
+                    <X className="w-3 h-3" />
+                  </span>
                 ))}
               </div>
             )}
@@ -145,8 +150,8 @@ export function AddInterestDialog({ open, onOpenChange, onAdd }: AddInterestDial
 
           {/* Priority */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-300">
-              Priority <span className="text-zinc-500">(affects notification threshold)</span>
+            <label className="font-terminal text-[10px] text-[#888888] tracking-wider">
+              $ PRIORITY_LEVEL
             </label>
             <div className="flex gap-2">
               {[1, 2, 3, 4, 5].map((p) => (
@@ -155,51 +160,55 @@ export function AddInterestDialog({ open, onOpenChange, onAdd }: AddInterestDial
                   type="button"
                   onClick={() => setPriority(p)}
                   className={cn(
-                    "w-10 h-10 rounded-lg font-semibold transition-all",
+                    "w-12 h-12 font-terminal text-lg border transition-none",
                     priority === p
                       ? p >= 5
-                        ? "bg-red-500 text-white"
+                        ? "border-[#ff4444] text-[#ff4444] bg-[#ff4444]/10"
                         : p >= 4
-                        ? "bg-orange-500 text-white"
+                        ? "border-[#ffb000] text-[#ffb000] bg-[#ffb000]/10"
                         : p >= 3
-                        ? "bg-yellow-500 text-black"
-                        : "bg-zinc-500 text-white"
-                      : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                        ? "border-[#00d4aa] text-[#00d4aa] bg-[#00d4aa]/10"
+                        : "border-[#888888] text-[#888888] bg-[#888888]/10"
+                      : "border-[#2a2a30] text-[#555555] hover:border-[#3a3a40]"
                   )}
                 >
                   {p}
                 </button>
               ))}
             </div>
-            <p className="text-xs text-zinc-500">
+            <p className="font-terminal text-[10px] text-[#555555]">
               {priority >= 5
-                ? "🔥 Critical - Notify immediately for any match"
+                ? "▲ CRITICAL :: Notify immediately for any match"
                 : priority >= 4
-                ? "⚡ High - Notify for good matches (75%+)"
+                ? "▲ HIGH :: Notify for good matches (75%+)"
                 : priority >= 3
-                ? "📌 Medium - Notify for strong matches (85%+)"
+                ? "● MEDIUM :: Notify for strong matches (85%+)"
                 : priority >= 2
-                ? "📋 Low - Only notify for excellent matches (95%+)"
-                : "💤 Minimal - Rarely notify"}
+                ? "▼ LOW :: Only notify for excellent matches (95%+)"
+                : "▽ MINIMAL :: Rarely notify"}
             </p>
           </div>
 
           {/* Submit */}
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex justify-end gap-3 pt-4 border-t border-[#2a2a30]">
             <Button
               type="button"
-              variant="ghost"
               onClick={() => onOpenChange(false)}
+              className="bg-transparent border border-[#2a2a30] hover:border-[#888888] hover:bg-transparent font-terminal text-xs text-[#888888]"
             >
-              Cancel
+              $ CANCEL
             </Button>
             <Button
               type="submit"
               disabled={!name.trim()}
-              className="bg-violet-600 hover:bg-violet-700"
+              className={cn(
+                "font-terminal text-xs border",
+                name.trim()
+                  ? "bg-[#00d4aa] text-[#0a0a0f] border-[#00d4aa] hover:bg-[#00d4aa]/90"
+                  : "bg-transparent border-[#2a2a30] text-[#555555]"
+              )}
             >
-              <Sparkles className="w-4 h-4 mr-2" />
-              Add Interest
+              ┌ INITIALIZE ┐
             </Button>
           </div>
         </form>

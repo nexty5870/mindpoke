@@ -13,8 +13,6 @@ import {
   ArrowUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -25,35 +23,21 @@ interface DiscoveryFeedProps {
   interests: Interest[];
 }
 
-const sourceIcons: Record<DiscoverySource, string> = {
-  x: "𝕏",
-  reddit: "🔴",
-  hackernews: "🟠",
-  rss: "📰",
-  arxiv: "📄",
+const sourceLabels: Record<DiscoverySource, string> = {
+  x: "X_NETWORK",
+  reddit: "REDDIT",
+  hackernews: "HN_FEED",
+  rss: "RSS_STREAM",
+  arxiv: "ARXIV_DB",
 };
 
 const sourceColors: Record<DiscoverySource, string> = {
-  x: "bg-zinc-800",
-  reddit: "bg-orange-500/20 text-orange-400",
-  hackernews: "bg-orange-600/20 text-orange-300",
-  rss: "bg-blue-500/20 text-blue-400",
-  arxiv: "bg-red-500/20 text-red-400",
+  x: "border-[#888888] text-[#888888]",
+  reddit: "border-[#ff4500] text-[#ff4500]",
+  hackernews: "border-[#ff6600] text-[#ff6600]",
+  rss: "border-[#00d4aa] text-[#00d4aa]",
+  arxiv: "border-[#b31b1b] text-[#b31b1b]",
 };
-
-function getRelevanceColor(score: number) {
-  if (score >= 90) return "text-green-400 bg-green-500/20";
-  if (score >= 75) return "text-yellow-400 bg-yellow-500/20";
-  if (score >= 60) return "text-orange-400 bg-orange-500/20";
-  return "text-zinc-400 bg-zinc-500/20";
-}
-
-function getRelevanceIcon(score: number) {
-  if (score >= 90) return "🔥";
-  if (score >= 75) return "🟡";
-  if (score >= 60) return "🟠";
-  return "⚪";
-}
 
 interface DiscoveryCardProps {
   discovery: Discovery;
@@ -63,63 +47,91 @@ interface DiscoveryCardProps {
 
 function DiscoveryCard({ discovery, interests, index }: DiscoveryCardProps) {
   const matchedInterestNames = discovery.matchedInterests
-    .map((id) => interests.find((i) => i.id === id)?.name)
+    .map((id) => interests.find((i) => i.id === id)?.name?.toUpperCase().replace(/\s+/g, '_'))
     .filter(Boolean);
+
+  const timestamp = new Date(discovery.publishedAt).toISOString();
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05 }}
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.03 }}
     >
-      <Card className="p-4 bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 transition-all group">
-        <div className="flex gap-4">
-          {/* Relevance Score */}
-          <div className="flex flex-col items-center gap-1">
-            <div
-              className={cn(
-                "w-12 h-12 rounded-xl flex flex-col items-center justify-center font-bold",
-                getRelevanceColor(discovery.relevanceScore)
-              )}
-            >
-              <span className="text-lg">{discovery.relevanceScore}</span>
-              <span className="text-[10px] opacity-70">%</span>
+      <div className={cn(
+        "border bg-[#111113] transition-none group",
+        discovery.status === "new" 
+          ? "border-[#2a2a30] hover:border-[#00d4aa]" 
+          : "border-[#1a1a1f] opacity-70"
+      )}>
+        {/* Card Header - Terminal Style */}
+        <div className="px-4 py-2 border-b border-[#2a2a30] flex items-center justify-between bg-[#0a0a0f]">
+          <div className="flex items-center gap-3">
+            {/* Source badge */}
+            <span className={cn(
+              "font-terminal text-[10px] px-2 py-0.5 border",
+              sourceColors[discovery.source]
+            )}>
+              {sourceLabels[discovery.source]}
+            </span>
+            
+            {/* Matched interests */}
+            {matchedInterestNames.map((name) => (
+              <span 
+                key={name} 
+                className="font-terminal text-[10px] text-[#00d4aa]"
+              >
+                #{name}
+              </span>
+            ))}
+          </div>
+
+          {/* Timestamp */}
+          <span className="font-terminal text-[10px] text-[#555555]">
+            {timestamp}
+          </span>
+        </div>
+
+        <div className="p-4 flex gap-4">
+          {/* Relevance Score - Cyber Style */}
+          <div className="flex flex-col items-center">
+            <div className={cn(
+              "w-16 h-16 border flex flex-col items-center justify-center",
+              discovery.relevanceScore >= 90
+                ? "border-[#00d4aa] text-[#00d4aa]"
+                : discovery.relevanceScore >= 75
+                ? "border-[#ffb000] text-[#ffb000]"
+                : "border-[#888888] text-[#888888]"
+            )}>
+              <span className="font-terminal text-2xl font-bold">
+                {discovery.relevanceScore}
+              </span>
+              <span className="font-terminal text-[8px] tracking-wider">
+                MATCH_%
+              </span>
             </div>
-            <span className="text-lg">{getRelevanceIcon(discovery.relevanceScore)}</span>
+            
+            {/* Status indicator */}
+            <div className="mt-2 font-terminal text-[8px] text-[#555555]">
+              {discovery.status === "new" ? "● NEW" : discovery.status === "saved" ? "◉ SAVED" : "○ READ"}
+            </div>
           </div>
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            {/* Header */}
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="secondary" className={cn("text-xs", sourceColors[discovery.source])}>
-                  {sourceIcons[discovery.source]} {discovery.source.toUpperCase()}
-                </Badge>
-                {matchedInterestNames.map((name) => (
-                  <Badge key={name} variant="outline" className="text-xs border-violet-500/50 text-violet-400">
-                    {name}
-                  </Badge>
-                ))}
-              </div>
-              <span className="text-xs text-zinc-500 whitespace-nowrap">
-                {formatDistanceToNow(discovery.publishedAt, { addSuffix: true })}
-              </span>
-            </div>
-
-            {/* Title */}
-            <h3 className="font-semibold text-white mb-1 group-hover:text-violet-400 transition-colors">
+            {/* Title - Serif */}
+            <h3 className="font-serif text-lg text-white mb-2 group-hover:text-[#00d4aa] transition-none">
               {discovery.title}
             </h3>
 
-            {/* Summary */}
-            <p className="text-sm text-zinc-400 mb-3 line-clamp-2">
+            {/* Summary - Terminal */}
+            <p className="font-terminal text-xs text-[#888888] mb-3 line-clamp-2">
               {discovery.summary}
             </p>
 
-            {/* Author & Metrics */}
+            {/* Metadata row */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4 text-xs text-zinc-500">
+              <div className="flex items-center gap-4 font-terminal text-[10px] text-[#555555]">
                 {discovery.authorHandle && (
                   <span>@{discovery.authorHandle}</span>
                 )}
@@ -149,53 +161,78 @@ function DiscoveryCard({ discovery, interests, index }: DiscoveryCardProps) {
                 )}
               </div>
 
-              {/* Actions */}
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+              {/* Actions - ASCII Style */}
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-none">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 border border-transparent hover:border-[#00d4aa] hover:bg-transparent"
+                >
                   {discovery.status === "saved" ? (
-                    <BookmarkCheck className="w-4 h-4 text-violet-400" />
+                    <BookmarkCheck className="w-4 h-4 text-[#00d4aa]" />
                   ) : (
-                    <Bookmark className="w-4 h-4" />
+                    <Bookmark className="w-4 h-4 text-[#888888]" />
                   )}
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <Eye className="w-4 h-4" />
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 border border-transparent hover:border-[#00d4aa] hover:bg-transparent"
+                >
+                  <Eye className="w-4 h-4 text-[#888888]" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <X className="w-4 h-4" />
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 border border-transparent hover:border-[#ff4444] hover:bg-transparent"
+                >
+                  <X className="w-4 h-4 text-[#888888]" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 border border-transparent hover:border-[#ffb000] hover:bg-transparent" 
+                  asChild
+                >
                   <a href={discovery.url} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="w-4 h-4" />
+                    <ExternalLink className="w-4 h-4 text-[#888888]" />
                   </a>
                 </Button>
               </div>
             </div>
           </div>
         </div>
-      </Card>
+      </div>
     </motion.div>
   );
 }
 
 export function DiscoveryFeed({ discoveries, interests }: DiscoveryFeedProps) {
   const sortedDiscoveries = [...discoveries].sort((a, b) => {
-    // New items first, then by relevance score
     if (a.status === "new" && b.status !== "new") return -1;
     if (a.status !== "new" && b.status === "new") return 1;
     return b.relevanceScore - a.relevanceScore;
   });
 
+  const newCount = discoveries.filter((d) => d.status === "new").length;
+
   return (
-    <ScrollArea className="h-full">
-      <div className="p-6 max-w-3xl mx-auto">
-        <div className="mb-6">
-          <h2 className="text-xl font-semibold mb-1">📡 Today&apos;s Discoveries</h2>
-          <p className="text-sm text-zinc-500">
-            {discoveries.filter((d) => d.status === "new").length} new finds matching your interests
-          </p>
+    <ScrollArea className="h-full bg-[#0a0a0f]">
+      <div className="p-6 max-w-4xl mx-auto">
+        {/* Header - Terminal style */}
+        <div className="mb-6 border-b border-[#2a2a30] pb-4">
+          <div className="font-terminal text-[10px] text-[#555555] mb-2">
+            $ LOG_STREAM :: DISCOVERY_FEED
+          </div>
+          <h2 className="font-serif text-2xl text-white mb-1">
+            Today&apos;s Discoveries
+          </h2>
+          <div className="font-terminal text-xs text-[#888888]">
+            PROCESSING_COMPLETE :: {newCount} NEW_ITEMS | {discoveries.length} TOTAL_ITEMS
+          </div>
         </div>
 
+        {/* Feed */}
         <div className="space-y-3">
           {sortedDiscoveries.map((discovery, index) => (
             <DiscoveryCard
@@ -205,6 +242,11 @@ export function DiscoveryFeed({ discoveries, interests }: DiscoveryFeedProps) {
               index={index}
             />
           ))}
+        </div>
+
+        {/* Footer */}
+        <div className="mt-8 pt-4 border-t border-[#2a2a30] font-terminal text-[10px] text-[#555555] text-center">
+          ─── END_OF_STREAM ───
         </div>
       </div>
     </ScrollArea>
