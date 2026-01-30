@@ -445,18 +445,21 @@ export function InterestGraph({
                     </div>
                   )}
 
-                  {/* Floating +X animation */}
+                  {/* Floating +X animation - pixel style */}
                   <AnimatePresence>
                     {nodeAnimations.has(node.id) && (
                       <motion.div
-                        initial={{ opacity: 0, y: 0, scale: 0.5 }}
-                        animate={{ opacity: [0, 1, 1, 0], y: -40, scale: [0.5, 1.1, 1, 0.9] }}
+                        initial={{ opacity: 0, y: 0, scale: 0.8 }}
+                        animate={{ opacity: [0, 1, 1, 1, 0], y: -50, scale: 1 }}
                         exit={{ opacity: 0 }}
-                        transition={{ duration: 1.5, ease: "easeOut" }}
-                        className="absolute -top-3 left-1/2 -translate-x-1/2 pointer-events-none"
+                        transition={{ duration: 1.8, ease: "easeOut", times: [0, 0.1, 0.5, 0.8, 1] }}
+                        className="absolute -top-2 left-1/2 -translate-x-1/2 pointer-events-none flex flex-col items-center"
                       >
-                        <span className="font-terminal text-lg font-bold text-[#00d4aa] drop-shadow-[0_0_8px_rgba(0,212,170,0.8)]">
+                        <span className="font-pixel text-xs text-[#00d4aa] drop-shadow-[0_0_10px_rgba(0,212,170,0.9)] tracking-wider">
                           +{nodeAnimations.get(node.id)}
+                        </span>
+                        <span className="font-pixel text-[8px] text-[#ffb000] mt-1 drop-shadow-[0_0_6px_rgba(255,176,0,0.8)]">
+                          NEW
                         </span>
                       </motion.div>
                     )}
