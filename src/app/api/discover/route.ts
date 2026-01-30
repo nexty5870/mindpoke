@@ -1,33 +1,56 @@
 import { NextResponse } from "next/server";
 import { searchTweets, calculateRelevance, type Tweet } from "@/lib/sources/bird";
+import { db } from "@/lib/db";
+import { discoveries, interests as interestsTable } from "@/lib/db/schema";
+import { eq, inArray } from "drizzle-orm";
 import type { Discovery, DiscoverySource, Interest } from "@/types";
 
-// In-memory store for seen tweet IDs (to prevent duplicates across searches)
-const seenTweetIds = new Set<string>();
-
-function tweetToDiscovery(tweet: Tweet, matchedInterests: Interest[]): Discovery {
-  const interestIds = matchedInterests.map((i) => i.id);
-  const allKeywords = matchedInterests.flatMap((i) => i.keywords);
-  
+function tweetToDbDiscovery(tweet: Tweet, interest: { id: string; keywords: string[] }) {
   return {
-    id: `disc_${tweet.id}`,
-    title: tweet.article?.title || tweet.text.slice(0, 120) + (tweet.text.length > 120 ? "..." : ""),
-    summary: tweet.article?.previewText || tweet.text,
-    url: `https://x.com/${tweet.author.username}/status/${tweet.id}`,
-    source: "x" as DiscoverySource,
+    sourceType: "twitter" as const,
     sourceId: tweet.id,
+    sourceUrl: `https://x.com/${tweet.author.username}/status/${tweet.id}`,
+    title: tweet.article?.title || tweet.text.slice(0, 120) + (tweet.text.length > 120 ? "..." : ""),
+    content: tweet.article?.previewText || tweet.text,
     author: tweet.author.name,
     authorHandle: tweet.author.username,
-    relevanceScore: calculateRelevance(tweet, allKeywords),
-    matchedInterests: interestIds,
-    engagementMetrics: {
+    metadata: {
       likes: tweet.likeCount || 0,
       retweets: tweet.retweetCount || 0,
-      comments: tweet.replyCount || 0,
+      replies: tweet.replyCount || 0,
+      quotedTweet: tweet.quotedTweet?.id,
+      conversationId: tweet.conversationId,
     },
-    status: "new",
+    relevanceScore: calculateRelevance(tweet, interest.keywords),
+    interestId: interest.id,
+    matchedKeywords: interest.keywords.filter(kw => 
+      tweet.text.toLowerCase().includes(kw.toLowerCase())
+    ),
+    status: "unseen" as const,
     publishedAt: new Date(tweet.createdAt),
-    discoveredAt: new Date(),
+  };
+}
+
+function dbToFrontendDiscovery(db: any): Discovery {
+  return {
+    id: db.id,
+    title: db.title || "",
+    summary: db.content || "",
+    url: db.sourceUrl || "",
+    source: (db.sourceType === "twitter" ? "x" : db.sourceType) as DiscoverySource,
+    sourceId: db.sourceId,
+    author: db.author,
+    authorHandle: db.authorHandle,
+    relevanceScore: db.relevanceScore || 0,
+    matchedInterests: db.interestId ? [db.interestId] : [],
+    engagementMetrics: {
+      likes: db.metadata?.likes,
+      retweets: db.metadata?.retweets,
+      comments: db.metadata?.replies,
+    },
+    status: db.status === "unseen" ? "new" : db.status === "seen" ? "read" : db.status,
+    publishedAt: db.publishedAt ? new Date(db.publishedAt) : new Date(),
+    discoveredAt: new Date(db.discoveredAt),
   };
 }
 
@@ -37,7 +60,6 @@ export async function POST(request: Request) {
     const interests: Interest[] = body.interests || [];
     const minRelevance: number = body.minRelevance || 50;
     const maxResults: number = body.maxResults || 20;
-    const includeSeenTweets: boolean = body.includeSeenTweets || false;
     
     if (!interests.length) {
       return NextResponse.json(
@@ -48,8 +70,14 @@ export async function POST(request: Request) {
     
     console.log(`[discover] Searching for ${interests.length} interests...`);
     
-    const allDiscoveries: Discovery[] = [];
-    const searchStats: Record<string, { query: string; found: number; relevant: number }> = {};
+    // Get existing sourceIds to avoid duplicates
+    const existingDiscoveries = await db.query.discoveries.findMany({
+      columns: { sourceId: true },
+    });
+    const existingSourceIds = new Set(existingDiscoveries.map(d => d.sourceId));
+    
+    const allNewDiscoveries: any[] = [];
+    const searchStats: Record<string, { query: string; found: number; relevant: number; new: number }> = {};
     
     // Search for each interest
     for (const interest of interests) {
@@ -61,78 +89,71 @@ export async function POST(request: Request) {
       try {
         const tweets = await searchTweets(query, 30);
         
-        // Filter out seen tweets unless explicitly included
-        const newTweets = includeSeenTweets 
-          ? tweets 
-          : tweets.filter((t) => !seenTweetIds.has(t.id));
+        // Filter out already-saved tweets
+        const newTweets = tweets.filter(t => !existingSourceIds.has(t.id));
         
-        // Convert to discoveries and calculate relevance
-        const discoveries = newTweets
-          .map((tweet) => tweetToDiscovery(tweet, [interest]))
-          .filter((d) => d.relevanceScore >= minRelevance);
+        // Convert to DB format and filter by relevance
+        const dbDiscoveries = newTweets
+          .map(tweet => tweetToDbDiscovery(tweet, { id: interest.id, keywords: interest.keywords }))
+          .filter(d => d.relevanceScore >= minRelevance);
         
-        // Mark as seen
-        newTweets.forEach((t) => seenTweetIds.add(t.id));
+        // Mark as seen for this session
+        newTweets.forEach(t => existingSourceIds.add(t.id));
         
-        allDiscoveries.push(...discoveries);
+        allNewDiscoveries.push(...dbDiscoveries);
         
         searchStats[interest.id] = {
           query,
           found: tweets.length,
-          relevant: discoveries.length,
+          relevant: dbDiscoveries.length,
+          new: newTweets.length,
         };
         
         // Small delay to avoid rate limiting
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 500));
       } catch (error) {
         console.error(`[discover] Search failed for ${interest.name}:`, error);
-        searchStats[interest.id] = { query, found: 0, relevant: 0 };
+        searchStats[interest.id] = { query, found: 0, relevant: 0, new: 0 };
       }
     }
     
-    // Deduplicate by tweet ID (in case same tweet matches multiple interests)
+    // Deduplicate by sourceId (in case same tweet matches multiple interests)
     const uniqueDiscoveries = Array.from(
-      new Map(allDiscoveries.map((d) => [d.sourceId, d])).values()
+      new Map(allNewDiscoveries.map(d => [d.sourceId, d])).values()
     );
     
-    // Merge matched interests for duplicates
-    const mergedDiscoveries = uniqueDiscoveries.map((discovery) => {
-      const matchingDiscoveries = allDiscoveries.filter(
-        (d) => d.sourceId === discovery.sourceId
-      );
-      const allMatchedInterests = [...new Set(
-        matchingDiscoveries.flatMap((d) => d.matchedInterests)
-      )];
-      
-      // Recalculate relevance with all matched interests
-      const allKeywords = interests
-        .filter((i) => allMatchedInterests.includes(i.id))
-        .flatMap((i) => i.keywords);
-      
-      return {
-        ...discovery,
-        matchedInterests: allMatchedInterests,
-        relevanceScore: Math.max(
-          discovery.relevanceScore,
-          ...matchingDiscoveries.map((d) => d.relevanceScore)
-        ),
-      };
-    });
-    
     // Sort by relevance and limit
-    const sortedDiscoveries = mergedDiscoveries
+    const sortedDiscoveries = uniqueDiscoveries
       .sort((a, b) => b.relevanceScore - a.relevanceScore)
       .slice(0, maxResults);
+    
+    // PERSIST TO DATABASE
+    let savedDiscoveries: any[] = [];
+    if (sortedDiscoveries.length > 0) {
+      console.log(`[discover] Persisting ${sortedDiscoveries.length} discoveries to database...`);
+      try {
+        savedDiscoveries = await db.insert(discoveries).values(sortedDiscoveries).returning();
+        console.log(`[discover] Saved ${savedDiscoveries.length} discoveries`);
+      } catch (dbError) {
+        console.error("[discover] Database save failed:", dbError);
+        // Continue anyway - return the discoveries even if save failed
+      }
+    }
+    
+    // Convert to frontend format for response
+    const frontendDiscoveries = (savedDiscoveries.length ? savedDiscoveries : sortedDiscoveries)
+      .map(dbToFrontendDiscovery);
     
     return NextResponse.json({
       success: true,
       data: {
-        discoveries: sortedDiscoveries,
+        discoveries: frontendDiscoveries,
         stats: {
           totalSearches: interests.length,
-          totalFound: allDiscoveries.length,
+          totalFound: allNewDiscoveries.length,
           uniqueResults: uniqueDiscoveries.length,
-          returned: sortedDiscoveries.length,
+          persisted: savedDiscoveries.length,
+          returned: frontendDiscoveries.length,
           byInterest: searchStats,
         },
       },
@@ -153,9 +174,10 @@ export async function POST(request: Request) {
 
 // GET endpoint for quick status check
 export async function GET() {
+  const count = await db.query.discoveries.findMany({ columns: { id: true } });
   return NextResponse.json({
     status: "ok",
-    seenTweets: seenTweetIds.size,
+    totalDiscoveries: count.length,
     timestamp: new Date().toISOString(),
   });
 }
