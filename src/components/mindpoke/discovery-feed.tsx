@@ -472,17 +472,28 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
   );
 }
 
+type FilterType = "new" | "saved" | "all";
+
 export function DiscoveryFeed({ discoveries, interests, onUpdateStatus }: DiscoveryFeedProps) {
-  // Filter out dismissed items and sort by status then relevance
+  const [filter, setFilter] = useState<FilterType>("new");
+
+  // Count by status
+  const newCount = discoveries.filter((d) => d.status === "new").length;
+  const savedCount = discoveries.filter((d) => d.status === "saved").length;
+
+  // Filter and sort discoveries based on selected filter
   const sortedDiscoveries = [...discoveries]
-    .filter((d) => d.status !== "dismissed")
+    .filter((d) => {
+      if (d.status === "dismissed") return false;
+      if (filter === "new") return d.status === "new";
+      if (filter === "saved") return d.status === "saved";
+      return true; // "all"
+    })
     .sort((a, b) => {
       if (a.status === "new" && b.status !== "new") return -1;
       if (a.status !== "new" && b.status === "new") return 1;
       return b.relevanceScore - a.relevanceScore;
     });
-
-  const newCount = discoveries.filter((d) => d.status === "new").length;
 
   return (
     <ScrollArea className="h-full bg-[#0a0a0f]">
@@ -496,26 +507,61 @@ export function DiscoveryFeed({ discoveries, interests, onUpdateStatus }: Discov
             Today&apos;s Discoveries
           </h2>
           <div className="font-terminal text-xs text-[#888888]">
-            PROCESSING_COMPLETE :: {newCount} NEW_ITEMS | {discoveries.length} TOTAL_ITEMS
+            PROCESSING_COMPLETE :: {newCount} NEW_ITEMS | {savedCount} SAVED_ITEMS | {discoveries.length} TOTAL
+          </div>
+
+          {/* Filter Tabs */}
+          <div className="flex gap-2 mt-4">
+            {(["new", "saved", "all"] as FilterType[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={cn(
+                  "px-4 py-2 font-terminal text-xs border transition-none",
+                  filter === f
+                    ? "border-[#00d4aa] text-[#00d4aa] bg-[#00d4aa]/10"
+                    : "border-[#2a2a30] text-[#888888] hover:border-[#3a3a40] hover:text-[#e6e6e6]"
+                )}
+              >
+                {f === "new" && `● NEW (${newCount})`}
+                {f === "saved" && `◉ SAVED (${savedCount})`}
+                {f === "all" && `○ ALL (${discoveries.filter(d => d.status !== "dismissed").length})`}
+              </button>
+            ))}
           </div>
         </div>
 
         {/* Feed */}
         <div className="space-y-3">
-          {sortedDiscoveries.map((discovery, index) => (
-            <DiscoveryCard
-              key={discovery.id}
-              discovery={discovery}
-              interests={interests}
-              index={index}
-              onUpdateStatus={onUpdateStatus}
-            />
-          ))}
+          {sortedDiscoveries.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="font-terminal text-[#555555] text-sm mb-2">
+                {filter === "new" && "$ NO_NEW_DISCOVERIES"}
+                {filter === "saved" && "$ NO_SAVED_ITEMS"}
+                {filter === "all" && "$ FEED_EMPTY"}
+              </div>
+              <div className="font-terminal text-[10px] text-[#3a3a40]">
+                {filter === "new" && "Run DISCOVER to fetch new content"}
+                {filter === "saved" && "Save discoveries to build your collection"}
+                {filter === "all" && "Run DISCOVER to populate the feed"}
+              </div>
+            </div>
+          ) : (
+            sortedDiscoveries.map((discovery, index) => (
+              <DiscoveryCard
+                key={discovery.id}
+                discovery={discovery}
+                interests={interests}
+                index={index}
+                onUpdateStatus={onUpdateStatus}
+              />
+            ))
+          )}
         </div>
 
         {/* Footer */}
         <div className="mt-8 pt-4 border-t border-[#2a2a30] font-terminal text-[10px] text-[#555555] text-center">
-          ─── END_OF_STREAM ───
+          ─── END_OF_STREAM :: {sortedDiscoveries.length} ITEMS ───
         </div>
       </div>
     </ScrollArea>
