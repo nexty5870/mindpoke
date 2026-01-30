@@ -16,6 +16,8 @@ import { cn } from "@/lib/utils";
 interface KeywordSuggestion {
   keyword: string;
   score: number;
+  reason?: string;
+  source?: "ai" | "frequency";
 }
 
 interface SuggestionsData {
@@ -24,6 +26,8 @@ interface SuggestionsData {
   existingKeywords: string[];
   savedCount: number;
   suggestedKeywords: KeywordSuggestion[];
+  relatedTopics?: string[];
+  sources?: { ai: boolean; frequency: boolean };
   message?: string;
 }
 
@@ -113,7 +117,7 @@ export function KeywordSuggestions({
             KEYWORD_SUGGESTIONS
           </DialogTitle>
           <DialogDescription className="font-terminal text-xs text-[#888888]">
-            Based on saved discoveries for {interestName.toUpperCase().replace(/\s+/g, "_")}
+            AI-powered suggestions for {interestName.toUpperCase().replace(/\s+/g, "_")}
           </DialogDescription>
         </DialogHeader>
 
@@ -161,25 +165,46 @@ export function KeywordSuggestions({
               {/* Suggestions */}
               {data.suggestedKeywords.length > 0 ? (
                 <div>
-                  <div className="font-terminal text-[10px] text-[#555555] mb-2">
-                    SUGGESTED_KEYWORDS (click to select):
+                  <div className="font-terminal text-[10px] text-[#555555] mb-2 flex items-center gap-2">
+                    SUGGESTED_KEYWORDS (click to select)
+                    {data.sources?.ai && (
+                      <span className="text-[#ffb000]">✦ AI_POWERED</span>
+                    )}
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="space-y-2">
                     {data.suggestedKeywords.map((suggestion) => (
                       <button
                         key={suggestion.keyword}
                         onClick={() => toggleKeyword(suggestion.keyword)}
                         className={cn(
-                          "flex items-center gap-1.5 px-2 py-1 border rounded font-terminal text-xs transition-all",
+                          "w-full flex items-center gap-2 px-3 py-2 border text-left transition-all",
                           selectedKeywords.has(suggestion.keyword)
-                            ? "border-[#00d4aa] text-[#00d4aa] bg-[#00d4aa]/20"
-                            : getScoreColor(suggestion.score, maxScore)
+                            ? "border-[#00d4aa] bg-[#00d4aa]/20"
+                            : "border-[#2a2a30] hover:border-[#3a3a40]"
                         )}
                       >
-                        <span>{suggestion.keyword}</span>
-                        <span className="text-[10px] opacity-60">({suggestion.score})</span>
-                        {selectedKeywords.has(suggestion.keyword) && (
-                          <Plus className="w-3 h-3" />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              "font-terminal text-sm",
+                              selectedKeywords.has(suggestion.keyword) ? "text-[#00d4aa]" : "text-[#e6e6e6]"
+                            )}>
+                              {suggestion.keyword}
+                            </span>
+                            {suggestion.source === "ai" && (
+                              <Sparkles className="w-3 h-3 text-[#ffb000]" />
+                            )}
+                          </div>
+                          {suggestion.reason && (
+                            <span className="font-terminal text-[10px] text-[#666666]">
+                              {suggestion.reason}
+                            </span>
+                          )}
+                        </div>
+                        {selectedKeywords.has(suggestion.keyword) ? (
+                          <Plus className="w-4 h-4 text-[#00d4aa]" />
+                        ) : (
+                          <div className="w-4 h-4 border border-[#3a3a40]" />
                         )}
                       </button>
                     ))}
@@ -190,6 +215,26 @@ export function KeywordSuggestions({
                   <p className="font-terminal text-xs text-[#888888]">
                     No additional keywords found. Try saving more discoveries!
                   </p>
+                </div>
+              )}
+
+              {/* Related Topics */}
+              {data.relatedTopics && data.relatedTopics.length > 0 && (
+                <div>
+                  <div className="font-terminal text-[10px] text-[#555555] mb-2">
+                    RELATED_TOPICS (new interest ideas):
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {data.relatedTopics.map((topic) => (
+                      <Badge
+                        key={topic}
+                        variant="outline"
+                        className="border-[#ffb000]/30 text-[#ffb000] font-terminal text-xs"
+                      >
+                        {topic}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
               )}
 

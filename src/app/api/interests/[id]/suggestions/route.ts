@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { discoveries, interests } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { suggestKeywords } from "@/lib/ai";
 
 // Common English stop words to filter out
 const STOP_WORDS = new Set([
@@ -115,6 +116,7 @@ export async function GET(
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get("limit") || "10");
+    const useAI = searchParams.get("ai") !== "false"; // Default to using AI
 
     // Get the interest with its keywords
     const interest = await db.query.interests.findFirst({
@@ -136,31 +138,60 @@ export async function GET(
       ),
     });
 
-    if (savedDiscoveries.length === 0) {
-      return NextResponse.json({
-        success: true,
-        data: {
-          interestId: id,
-          interestName: interest.name,
-          savedCount: 0,
-          suggestedKeywords: [],
-          message: "No saved discoveries to analyze. Save some discoveries first!",
-        },
-      });
-    }
-
     // Extract text content from discoveries
     const texts = savedDiscoveries.flatMap(d => [
       d.title || "",
       d.content || "",
     ]).filter(Boolean);
 
-    // Get keyword suggestions
-    const suggestedKeywords = extractKeywords(
-      texts,
-      interest.keywords || [],
-      limit
-    );
+    // Get frequency-based suggestions from saved content
+    const frequencyKeywords = savedDiscoveries.length > 0
+      ? extractKeywords(texts, interest.keywords || [], limit)
+      : [];
+
+    // Get AI-powered suggestions
+    let aiSuggestions: { keyword: string; reason: string }[] = [];
+    let relatedTopics: string[] = [];
+    
+    if (useAI) {
+      try {
+        const aiResult = await suggestKeywords(
+          interest.name,
+          interest.keywords || [],
+          {
+            savedTitles: savedDiscoveries.slice(0, 5).map(d => d.title || d.content || "").filter(Boolean),
+          }
+        );
+        aiSuggestions = aiResult.suggestions;
+        relatedTopics = aiResult.relatedTopics;
+      } catch (e) {
+        console.error("AI suggestions failed:", e);
+      }
+    }
+
+    // Merge and dedupe suggestions
+    const existingSet = new Set((interest.keywords || []).map(k => k.toLowerCase()));
+    const seenKeywords = new Set<string>();
+    
+    const mergedSuggestions = [
+      ...aiSuggestions.map(s => ({
+        keyword: s.keyword,
+        score: 100, // AI suggestions get high score
+        reason: s.reason,
+        source: "ai" as const,
+      })),
+      ...frequencyKeywords.map(s => ({
+        keyword: s.keyword,
+        score: s.score,
+        reason: `Appears ${s.score}x in saved content`,
+        source: "frequency" as const,
+      })),
+    ].filter(s => {
+      const lower = s.keyword.toLowerCase();
+      if (existingSet.has(lower) || seenKeywords.has(lower)) return false;
+      seenKeywords.add(lower);
+      return true;
+    }).slice(0, limit);
 
     return NextResponse.json({
       success: true,
@@ -169,7 +200,12 @@ export async function GET(
         interestName: interest.name,
         existingKeywords: interest.keywords,
         savedCount: savedDiscoveries.length,
-        suggestedKeywords,
+        suggestedKeywords: mergedSuggestions,
+        relatedTopics,
+        sources: {
+          ai: aiSuggestions.length > 0,
+          frequency: frequencyKeywords.length > 0,
+        },
       },
     });
   } catch (error) {
