@@ -4,7 +4,8 @@ import { searchReddit, calculateRedditRelevance, type RedditPost } from "@/lib/s
 import { searchHackerNews, calculateHNRelevance, type HNStory } from "@/lib/sources/hackernews";
 import { db } from "@/lib/db";
 import { discoveries, interests as interestsTable, settings } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { generateEmbeddings, findDuplicatesByEmbedding } from "@/lib/embeddings";
 
 // Helper to load app settings
 async function loadSettings() {
@@ -326,13 +327,58 @@ export async function POST(request: Request) {
     const sortedDiscoveries = uniqueDiscoveries
       .sort((a, b) => b.relevanceScore - a.relevanceScore);
     
-    // PERSIST TO DATABASE
+    // SMART DEDUPLICATION & AUTO-EMBED
     let savedDiscoveries: any[] = [];
+    let skippedDuplicates = 0;
+    
     if (sortedDiscoveries.length > 0) {
-      console.log(`[discover] Persisting ${sortedDiscoveries.length} discoveries to database...`);
+      console.log(`[discover] Processing ${sortedDiscoveries.length} discoveries with dedup + auto-embed...`);
+      
       try {
-        savedDiscoveries = await db.insert(discoveries).values(sortedDiscoveries).returning();
-        console.log(`[discover] Saved ${savedDiscoveries.length} discoveries`);
+        // Generate embeddings for all new discoveries in batch
+        const texts = sortedDiscoveries.map(d => `${d.title || ""} ${d.content}`.trim());
+        const embeddings = await generateEmbeddings(texts);
+        console.log(`[discover] Generated ${embeddings.length} embeddings`);
+        
+        // Check each discovery for duplicates and save non-duplicates
+        const toSave: any[] = [];
+        const embeddingsToSave: { index: number; embedding: number[] }[] = [];
+        
+        for (let i = 0; i < sortedDiscoveries.length; i++) {
+          const discovery = sortedDiscoveries[i];
+          const embedding = embeddings[i];
+          
+          // Check for semantic duplicates (similarity > 0.95)
+          const duplicates = await findDuplicatesByEmbedding(embedding, 0.95);
+          
+          if (duplicates.length > 0) {
+            console.log(`[discover] Skipping duplicate: "${discovery.title?.slice(0, 50) || discovery.content.slice(0, 50)}..." (${Math.round(duplicates[0].similarity * 100)}% similar to existing)`);
+            skippedDuplicates++;
+          } else {
+            toSave.push(discovery);
+            embeddingsToSave.push({ index: toSave.length - 1, embedding });
+          }
+        }
+        
+        if (toSave.length > 0) {
+          console.log(`[discover] Saving ${toSave.length} unique discoveries (skipped ${skippedDuplicates} duplicates)...`);
+          savedDiscoveries = await db.insert(discoveries).values(toSave).returning();
+          
+          // Update embeddings for saved discoveries
+          console.log(`[discover] Updating embeddings for ${savedDiscoveries.length} discoveries...`);
+          for (const { index, embedding } of embeddingsToSave) {
+            const discoveryId = savedDiscoveries[index].id;
+            const vectorStr = `[${embedding.join(",")}]`;
+            await db.execute(sql`
+              UPDATE discoveries 
+              SET embedding = ${vectorStr}::vector 
+              WHERE id = ${discoveryId}
+            `);
+          }
+          console.log(`[discover] Saved ${savedDiscoveries.length} discoveries with embeddings`);
+        } else {
+          console.log(`[discover] All ${sortedDiscoveries.length} discoveries were duplicates`);
+        }
       } catch (dbError) {
         console.error("[discover] Database save failed:", dbError);
       }
@@ -364,6 +410,7 @@ export async function POST(request: Request) {
           totalInterests: allInterests.length,
           totalFound: allNewDiscoveries.length,
           uniqueResults: uniqueDiscoveries.length,
+          skippedDuplicates,
           persisted: savedDiscoveries.length,
           returned: frontendDiscoveries.length,
           bySource,
