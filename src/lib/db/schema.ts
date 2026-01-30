@@ -84,6 +84,9 @@ export const discoveries = pgTable('discoveries', {
   status: text('status').notNull().default('unseen'), // unseen, seen, saved, dismissed
   seenAt: timestamp('seen_at'),
   
+  // Embedding for semantic search (1536 dimensions - text-embedding-3-small)
+  embedding: text('embedding'), // Stored as vector in DB, text in Drizzle
+  
   // Timestamps
   publishedAt: timestamp('published_at'),
   discoveredAt: timestamp('discovered_at').defaultNow().notNull(),

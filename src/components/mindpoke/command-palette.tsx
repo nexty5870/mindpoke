@@ -15,6 +15,7 @@ interface SearchResult {
   authorHandle: string | null;
   relevanceScore: number;
   discoveredAt: string;
+  similarity?: number; // For semantic search
   interest?: {
     id: string;
     name: string;
@@ -55,6 +56,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [searchMode, setSearchMode] = useState<"keyword" | "semantic">("keyword");
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
@@ -77,15 +79,24 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
 
     const timer = setTimeout(() => {
       performSearch(query);
-    }, 200);
+    }, searchMode === "semantic" ? 400 : 200); // Slightly longer debounce for semantic
 
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, searchMode]);
 
   const performSearch = async (q: string) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=10`);
+      let res;
+      if (searchMode === "semantic") {
+        res = await fetch("/api/search/semantic", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: q, limit: 10 }),
+        });
+      } else {
+        res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=10`);
+      }
       const data = await res.json();
       if (data.success) {
         setResults(data.data || []);
@@ -158,13 +169,24 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Search discoveries..."
+              placeholder={searchMode === "semantic" ? "Search by meaning..." : "Search discoveries..."}
               className="flex-1 bg-transparent font-terminal text-sm text-[#e6e6e6] placeholder:text-[#555555] outline-none"
             />
             {isLoading && <Loader2 className="w-4 h-4 text-[#00d4aa] animate-spin" />}
-            <div className="flex items-center gap-1 text-[#555555]">
-              <kbd className="px-1.5 py-0.5 bg-[#1a1a1f] border border-[#2a2a30] font-terminal text-[9px]">ESC</kbd>
-            </div>
+            {/* Mode Toggle */}
+            <button
+              onClick={() => setSearchMode(m => m === "keyword" ? "semantic" : "keyword")}
+              className={cn(
+                "px-2 py-1 font-terminal text-[9px] border transition-none",
+                searchMode === "semantic"
+                  ? "border-[#00d4aa] text-[#00d4aa] bg-[#00d4aa]/10"
+                  : "border-[#2a2a30] text-[#555555] hover:border-[#3a3a40]"
+              )}
+              title="Toggle semantic search (AI-powered)"
+            >
+              {searchMode === "semantic" ? "🧠 AI" : "⌨️ KW"}
+            </button>
+            <kbd className="px-1.5 py-0.5 bg-[#1a1a1f] border border-[#2a2a30] font-terminal text-[9px] text-[#555555]">ESC</kbd>
           </div>
 
           {/* Hints */}
@@ -226,9 +248,12 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                       </span>
                     )}
 
-                    {/* Relevance */}
+                    {/* Relevance or Similarity */}
                     <span className="ml-auto font-terminal text-[9px] text-[#ffb000]">
-                      {Math.round(result.relevanceScore)}%
+                      {result.similarity !== undefined 
+                        ? `${result.similarity}% similar`
+                        : `${Math.round(result.relevanceScore)}%`
+                      }
                     </span>
                   </div>
 
