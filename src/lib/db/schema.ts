@@ -134,6 +134,36 @@ export const pokesRelations = relations(pokes, ({ one }) => ({
 }));
 
 // ============================================================================
+// CRON RUNS (Discovery run history)
+// ============================================================================
+
+export const cronRuns = pgTable('cron_runs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  
+  // Run timing
+  startedAt: timestamp('started_at').defaultNow().notNull(),
+  completedAt: timestamp('completed_at'),
+  durationMs: integer('duration_ms'),
+  
+  // Discovery stats
+  discoveriesFound: integer('discoveries_found').notNull().default(0),
+  discoveriesSaved: integer('discoveries_saved').notNull().default(0),
+  interestsScanned: integer('interests_scanned').notNull().default(0),
+  
+  // Notification stats
+  pokesQueued: integer('pokes_queued').notNull().default(0),
+  pokesSent: integer('pokes_sent').notNull().default(0),
+  notificationSkipped: boolean('notification_skipped').notNull().default(false), // true if quiet hours
+  
+  // Status
+  status: text('status').notNull().default('running'), // running, completed, failed
+  error: text('error'),
+});
+
+export type CronRun = typeof cronRuns.$inferSelect;
+export type NewCronRun = typeof cronRuns.$inferInsert;
+
+// ============================================================================
 // SETTINGS
 // ============================================================================
 

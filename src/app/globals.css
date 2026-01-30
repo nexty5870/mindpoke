@@ -253,4 +253,34 @@
     background: var(--cyber-cyan);
     color: var(--cyber-bg);
   }
+
+  /* Custom scrollbar - cyber-serif style */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #1a1a1f;
+    border: 1px solid #2a2a30;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #3a3a40;
+    border: 1px solid #2a2a30;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--cyber-cyan);
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: #1a1a1f;
+  }
+
+  /* Firefox scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #3a3a40 #1a1a1f;
+  }
 }

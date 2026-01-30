@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Bell, Network, List, Terminal, Send, X, ExternalLink } from "lucide-react";
+import { Bell, Network, List, Terminal, Send, X, ExternalLink, Clock, Zap, Moon } from "lucide-react";
 import { Icon } from "@iconify/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,45 @@ interface Poke {
   channel: string;
 }
 
+interface Discovery {
+  id: string;
+  title: string | null;
+  content: string;
+  sourceType: string;
+  sourceUrl: string | null;
+  author: string | null;
+  authorHandle: string | null;
+  relevanceScore: number;
+  status: string;
+  discoveredAt: string;
+  interest?: {
+    id: string;
+    name: string;
+    color: string;
+  } | null;
+}
+
+interface CronStatus {
+  lastRun: {
+    id: string;
+    startedAt: string;
+    completedAt: string | null;
+    status: string;
+    durationMs: number | null;
+    discoveriesFound: number;
+    discoveriesSaved: number;
+    interestsScanned: number;
+    pokesQueued: number;
+    pokesSent: number;
+    notificationSkipped: boolean;
+    error: string | null;
+  } | null;
+  stats: {
+    totalFound24h: number;
+    runsLast24h: number;
+  };
+}
+
 interface HeaderProps {
   view: "graph" | "feed";
   onViewChange: (view: "graph" | "feed") => void;
@@ -24,9 +63,13 @@ export function Header({ view, onViewChange, discoveryCount }: HeaderProps) {
   const timestamp = new Date().toISOString();
   const [showNotifications, setShowNotifications] = useState(false);
   const [pokes, setPokes] = useState<Poke[]>([]);
+  const [discoveries, setDiscoveries] = useState<Discovery[]>([]);
+  const [activeTab, setActiveTab] = useState<"discoveries" | "pokes">("discoveries");
   const [isLoadingPokes, setIsLoadingPokes] = useState(false);
+  const [isLoadingDiscoveries, setIsLoadingDiscoveries] = useState(false);
   const [isSendingPoke, setIsSendingPoke] = useState(false);
   const [pokePreview, setPokePreview] = useState<string | null>(null);
+  const [cronStatus, setCronStatus] = useState<CronStatus | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
@@ -40,13 +83,42 @@ export function Header({ view, onViewChange, discoveryCount }: HeaderProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch recent pokes when dropdown opens
+  // Fetch data when dropdown opens
   useEffect(() => {
     if (showNotifications) {
+      fetchDiscoveries();
       fetchPokes();
       fetchPokePreview();
+      fetchCronStatus();
     }
   }, [showNotifications]);
+
+  const fetchDiscoveries = async () => {
+    setIsLoadingDiscoveries(true);
+    try {
+      const res = await fetch("/api/discoveries?status=unseen&limit=10");
+      const data = await res.json();
+      if (data.success) {
+        setDiscoveries(data.data || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch discoveries:", e);
+    } finally {
+      setIsLoadingDiscoveries(false);
+    }
+  };
+
+  const fetchCronStatus = async () => {
+    try {
+      const res = await fetch("/api/cron/status");
+      const data = await res.json();
+      if (data.success) {
+        setCronStatus(data.data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch cron status:", e);
+    }
+  };
 
   const fetchPokes = async () => {
     setIsLoadingPokes(true);
@@ -208,66 +280,211 @@ export function Header({ view, onViewChange, discoveryCount }: HeaderProps) {
                 </button>
               </div>
 
-              {/* Send Poke Section */}
+              {/* Last Run Status */}
+              {cronStatus?.lastRun && (
+                <div className="px-4 py-3 border-b border-[#2a2a30] bg-[#0a0a0f]/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="font-terminal text-[10px] text-[#555555] flex items-center gap-1.5">
+                      <Clock className="w-3 h-3" />
+                      LAST_DISCOVERY_RUN
+                    </div>
+                    {cronStatus.lastRun.notificationSkipped && (
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 bg-[#2a2a30] font-terminal text-[9px] text-[#888888]">
+                        <Moon className="w-3 h-3" />
+                        QUIET_HOURS
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 font-terminal text-[10px]">
+                    <div>
+                      <span className="text-[#555555]">TIME:</span>
+                      <span className="text-[#888888] ml-1">
+                        {new Date(cronStatus.lastRun.startedAt).toLocaleTimeString("en-GB", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[#555555]">STATUS:</span>
+                      <span className={cn(
+                        "ml-1",
+                        cronStatus.lastRun.status === "completed" ? "text-[#00d4aa]" :
+                        cronStatus.lastRun.status === "running" ? "text-[#ffb000]" : "text-[#ff4444]"
+                      )}>
+                        {cronStatus.lastRun.status.toUpperCase()}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[#555555]">FOUND:</span>
+                      <span className="text-[#ffb000] ml-1">{cronStatus.lastRun.discoveriesSaved}</span>
+                      <span className="text-[#555555] ml-0.5">new</span>
+                    </div>
+                    <div>
+                      <span className="text-[#555555]">SCANNED:</span>
+                      <span className="text-[#888888] ml-1">{cronStatus.lastRun.interestsScanned}</span>
+                      <span className="text-[#555555] ml-0.5">interests</span>
+                    </div>
+                  </div>
+
+                  {/* 24h Summary */}
+                  <div className="mt-2 pt-2 border-t border-[#2a2a30]/50 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 font-terminal text-[10px]">
+                      <Zap className="w-3 h-3 text-[#00d4aa]" />
+                      <span className="text-[#555555]">24H:</span>
+                      <span className="text-[#00d4aa]">{cronStatus.stats.totalFound24h}</span>
+                      <span className="text-[#555555]">discovered</span>
+                    </div>
+                    <div className="font-terminal text-[10px] text-[#555555]">
+                      {cronStatus.stats.runsLast24h} runs
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tabs */}
+              <div className="flex border-b border-[#2a2a30]">
+                <button
+                  onClick={() => setActiveTab("discoveries")}
+                  className={cn(
+                    "flex-1 px-4 py-2 font-terminal text-[10px] transition-none",
+                    activeTab === "discoveries"
+                      ? "bg-[#00d4aa]/10 text-[#00d4aa] border-b border-[#00d4aa]"
+                      : "text-[#555555] hover:text-[#888888] hover:bg-[#1a1a1f]"
+                  )}
+                >
+                  NEW_FEED [{discoveries.length}]
+                </button>
+                <button
+                  onClick={() => setActiveTab("pokes")}
+                  className={cn(
+                    "flex-1 px-4 py-2 font-terminal text-[10px] transition-none border-l border-[#2a2a30]",
+                    activeTab === "pokes"
+                      ? "bg-[#00d4aa]/10 text-[#00d4aa] border-b border-[#00d4aa]"
+                      : "text-[#555555] hover:text-[#888888] hover:bg-[#1a1a1f]"
+                  )}
+                >
+                  SENT_POKES [{pokes.length}]
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              <div className="max-h-72 overflow-y-auto">
+                {activeTab === "discoveries" ? (
+                  /* New Discoveries Tab */
+                  isLoadingDiscoveries ? (
+                    <div className="px-4 py-6 text-center font-terminal text-[10px] text-[#555555]">
+                      LOADING...
+                    </div>
+                  ) : discoveries.length === 0 ? (
+                    <div className="px-4 py-6 text-center">
+                      <div className="font-terminal text-[10px] text-[#555555]">NO_NEW_DISCOVERIES</div>
+                      <div className="font-terminal text-[10px] text-[#3a3a40] mt-1">
+                        All caught up!
+                      </div>
+                    </div>
+                  ) : (
+                    discoveries.map((discovery) => (
+                      <a
+                        key={discovery.id}
+                        href={discovery.sourceUrl || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block px-4 py-3 border-b border-[#2a2a30] last:border-b-0 hover:bg-[#1a1a1f] group"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            {discovery.interest && (
+                              <span 
+                                className="px-1.5 py-0.5 font-terminal text-[9px] border"
+                                style={{ 
+                                  borderColor: discovery.interest.color,
+                                  color: discovery.interest.color 
+                                }}
+                              >
+                                {discovery.interest.name.toUpperCase()}
+                              </span>
+                            )}
+                            <span className="font-terminal text-[9px] text-[#555555]">
+                              {discovery.sourceType.toUpperCase()}
+                            </span>
+                          </div>
+                          <span className="font-terminal text-[9px] text-[#ffb000]">
+                            {Math.round(discovery.relevanceScore)}%
+                          </span>
+                        </div>
+                        <div className="font-terminal text-[10px] text-[#e6e6e6] line-clamp-2 group-hover:text-[#00d4aa]">
+                          {discovery.title || discovery.content.slice(0, 100)}
+                        </div>
+                        {discovery.authorHandle && (
+                          <div className="font-terminal text-[9px] text-[#555555] mt-1">
+                            @{discovery.authorHandle}
+                          </div>
+                        )}
+                      </a>
+                    ))
+                  )
+                ) : (
+                  /* Sent Pokes Tab */
+                  isLoadingPokes ? (
+                    <div className="px-4 py-6 text-center font-terminal text-[10px] text-[#555555]">
+                      LOADING...
+                    </div>
+                  ) : pokes.length === 0 ? (
+                    <div className="px-4 py-6 text-center">
+                      <div className="font-terminal text-[10px] text-[#555555]">NO_POKES_SENT</div>
+                      <div className="font-terminal text-[10px] text-[#3a3a40] mt-1">
+                        Run discover to find content
+                      </div>
+                    </div>
+                  ) : (
+                    pokes.map((poke) => (
+                      <div 
+                        key={poke.id}
+                        className="px-4 py-3 border-b border-[#2a2a30] last:border-b-0 hover:bg-[#1a1a1f]"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-terminal text-[10px] text-[#00d4aa]">
+                            via {poke.channel.toUpperCase()}
+                          </span>
+                          <span className="font-terminal text-[10px] text-[#555555]">
+                            {new Date(poke.sentAt).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <div className="font-terminal text-[10px] text-[#888888] line-clamp-2">
+                          {poke.message.slice(0, 100)}...
+                        </div>
+                      </div>
+                    ))
+                  )
+                )}
+              </div>
+
+              {/* Send Poke Button (always visible at bottom) */}
               {pokePreview && (
-                <div className="px-4 py-3 border-b border-[#2a2a30] bg-[#0a0a0f]">
-                  <div className="font-terminal text-[10px] text-[#ffb000] mb-2 flex items-center gap-1.5">
-                    <Icon icon="hugeicons:ai-brain-02" className="w-4 h-4" />
-                    READY_TO_POKE
-                  </div>
-                  <div className="font-terminal text-[10px] text-[#888888] mb-3 line-clamp-3">
-                    {pokePreview.split('\n').slice(0, 3).join(' ')}...
-                  </div>
+                <div className="px-4 py-3 border-t border-[#2a2a30] bg-[#0a0a0f]">
                   <button
                     onClick={sendPoke}
                     disabled={isSendingPoke}
                     className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-[#00d4aa] text-[#00d4aa] font-terminal text-xs hover:bg-[#00d4aa]/10 disabled:opacity-50"
                   >
                     <Send className="w-3 h-3" />
-                    {isSendingPoke ? "SENDING..." : "SEND_TO_WHATSAPP"}
+                    {isSendingPoke ? "SENDING..." : "POKE_NOW"}
                   </button>
                 </div>
               )}
 
-              {/* Recent Pokes */}
-              <div className="max-h-64 overflow-y-auto">
-                {isLoadingPokes ? (
-                  <div className="px-4 py-6 text-center font-terminal text-[10px] text-[#555555]">
-                    LOADING...
-                  </div>
-                ) : pokes.length === 0 ? (
-                  <div className="px-4 py-6 text-center">
-                    <div className="font-terminal text-[10px] text-[#555555]">NO_POKES_SENT</div>
-                    <div className="font-terminal text-[10px] text-[#3a3a40] mt-1">
-                      Run discover to find content
-                    </div>
-                  </div>
-                ) : (
-                  pokes.map((poke) => (
-                    <div 
-                      key={poke.id}
-                      className="px-4 py-3 border-b border-[#2a2a30] last:border-b-0 hover:bg-[#1a1a1f]"
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-terminal text-[10px] text-[#00d4aa]">
-                          via {poke.channel.toUpperCase()}
-                        </span>
-                        <span className="font-terminal text-[10px] text-[#555555]">
-                          {new Date(poke.sentAt).toLocaleTimeString()}
-                        </span>
-                      </div>
-                      <div className="font-terminal text-[10px] text-[#888888] line-clamp-2">
-                        {poke.message.slice(0, 100)}...
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
               {/* Footer */}
-              <div className="px-4 py-2 border-t border-[#2a2a30] font-terminal text-[10px] text-[#555555] text-center">
-                {discoveryCount} NEW_DISCOVERIES_PENDING
-              </div>
+              <button 
+                onClick={() => {
+                  onViewChange("feed");
+                  setShowNotifications(false);
+                }}
+                className="w-full px-4 py-2 border-t border-[#2a2a30] font-terminal text-[10px] text-[#555555] text-center hover:bg-[#1a1a1f] hover:text-[#00d4aa]"
+              >
+                VIEW_ALL_FEED →
+              </button>
             </div>
           )}
         </div>

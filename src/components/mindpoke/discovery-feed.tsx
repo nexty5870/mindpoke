@@ -22,6 +22,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { Discovery, Interest, DiscoverySource } from "@/types";
 
+// Format timestamp - "30 Jan, 22:21"
+function formatDateTime(date: Date | string): string {
+  const d = new Date(date);
+  return d.toLocaleDateString("en-GB", { 
+    day: "numeric", 
+    month: "short",
+  }) + ", " + d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 // Source Icons as SVG components
 const XIcon = () => (
   <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor">
@@ -166,7 +178,7 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
     .map((id) => interests.find((i) => i.id === id)?.name?.toUpperCase().replace(/\s+/g, '_'))
     .filter(Boolean);
 
-  const timestamp = new Date(discovery.publishedAt).toISOString();
+  const timestamp = formatDateTime(discovery.publishedAt);
 
   // Build direct X link
   const xUrl = discovery.source === "x" && discovery.authorHandle
