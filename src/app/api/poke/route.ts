@@ -1,10 +1,44 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { discoveries, pokes, interests } from "@/lib/db/schema";
+import { discoveries, pokes, interests, settings } from "@/lib/db/schema";
 import { eq, gt, and, notInArray, desc } from "drizzle-orm";
 
-const MIN_RELEVANCE = 80;
-const MAX_POKES_PER_BATCH = 3;
+const DEFAULT_MIN_RELEVANCE = 55;
+const DEFAULT_MAX_POKES = 3;
+
+// Helper to load app settings
+async function loadSettings() {
+  const result = await db.query.settings.findFirst({
+    where: eq(settings.key, "app_settings"),
+  });
+  return result?.value as {
+    minPokeRelevance?: number;
+    maxPokesPerBatch?: number;
+    quietHoursStart?: string;
+    quietHoursEnd?: string;
+  } | null;
+}
+
+// Check if current time is within quiet hours
+function isQuietHours(start?: string, end?: string): boolean {
+  if (!start || !end) return false;
+  
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  
+  const [startHour, startMin] = start.split(":").map(Number);
+  const [endHour, endMin] = end.split(":").map(Number);
+  
+  const startMinutes = startHour * 60 + startMin;
+  const endMinutes = endHour * 60 + endMin;
+  
+  // Handle overnight quiet hours (e.g., 23:00 to 08:00)
+  if (startMinutes > endMinutes) {
+    return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+  }
+  
+  return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+}
 
 interface PokeableDiscovery {
   id: string;
@@ -88,9 +122,29 @@ function formatPokeMessage(discoveries: PokeableDiscovery[]): string {
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const minRelevance = body.minRelevance ?? MIN_RELEVANCE;
-    const maxPokes = body.maxPokes ?? MAX_POKES_PER_BATCH;
+    
+    // Load settings
+    const appSettings = await loadSettings();
+    
+    // Use settings values with fallbacks, allow body to override
+    const minRelevance = body.minRelevance ?? appSettings?.minPokeRelevance ?? DEFAULT_MIN_RELEVANCE;
+    const maxPokes = body.maxPokes ?? appSettings?.maxPokesPerBatch ?? DEFAULT_MAX_POKES;
     const dryRun = body.dryRun ?? false;
+    
+    // Check quiet hours (unless explicitly overridden)
+    if (!body.ignoreQuietHours && isQuietHours(appSettings?.quietHoursStart, appSettings?.quietHoursEnd)) {
+      console.log("[poke] Skipping - quiet hours active");
+      return NextResponse.json({
+        success: true,
+        message: "",
+        discoveries: [],
+        count: 0,
+        reason: "Quiet hours active - no pokes sent",
+        quietHours: true,
+      });
+    }
+    
+    console.log(`[poke] Using minRelevance=${minRelevance}, maxPokes=${maxPokes}`);
 
     // Get discovery IDs that have already been poked
     const alreadyPoked = await db.query.pokes.findMany({

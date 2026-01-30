@@ -3,7 +3,20 @@ import { searchTweets, calculateRelevance, type Tweet } from "@/lib/sources/bird
 import { searchReddit, calculateRedditRelevance, type RedditPost } from "@/lib/sources/reddit";
 import { searchHackerNews, calculateHNRelevance, type HNStory } from "@/lib/sources/hackernews";
 import { db } from "@/lib/db";
-import { discoveries, interests as interestsTable } from "@/lib/db/schema";
+import { discoveries, interests as interestsTable, settings } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+
+// Helper to load app settings
+async function loadSettings() {
+  const result = await db.query.settings.findFirst({
+    where: eq(settings.key, "app_settings"),
+  });
+  return result?.value as {
+    discoverIntervalHours?: number;
+    minPokeRelevance?: number;
+    enabledSources?: { twitter?: boolean; reddit?: boolean; hackernews?: boolean };
+  } | null;
+}
 import type { Discovery, DiscoverySource } from "@/types";
 
 // Non-Latin script ranges to block
@@ -165,6 +178,12 @@ export async function POST(request: Request) {
     const minRelevance: number = body.minRelevance || 25;
     const maxResultsPerInterest: number = body.maxResultsPerInterest || 10;
     
+    // Load settings to check enabled sources
+    const appSettings = await loadSettings();
+    const enabledSources = appSettings?.enabledSources || { twitter: true, reddit: true, hackernews: true };
+    
+    console.log(`[discover] Enabled sources: X=${enabledSources.twitter}, Reddit=${enabledSources.reddit}, HN=${enabledSources.hackernews}`);
+    
     // ALWAYS fetch interests from database to get current keywords
     const allInterests = await db.query.interests.findMany();
     
@@ -203,20 +222,26 @@ export async function POST(request: Request) {
       const sourceStats: Record<string, number> = {};
       
       try {
-        // Run all sources in parallel
+        // Run enabled sources in parallel
         const [tweets, redditPosts, hnStories] = await Promise.all([
-          searchTweets(query, 30).catch(err => {
-            console.error(`[discover] Twitter search failed:`, err);
-            return [];
-          }),
-          searchReddit(keywords, 20).catch(err => {
-            console.error(`[discover] Reddit search failed:`, err);
-            return [];
-          }),
-          searchHackerNews(keywords, 20).catch(err => {
-            console.error(`[discover] HackerNews search failed:`, err);
-            return [];
-          }),
+          enabledSources.twitter !== false
+            ? searchTweets(query, 30).catch(err => {
+                console.error(`[discover] Twitter search failed:`, err);
+                return [];
+              })
+            : Promise.resolve([]),
+          enabledSources.reddit !== false
+            ? searchReddit(keywords, 20).catch(err => {
+                console.error(`[discover] Reddit search failed:`, err);
+                return [];
+              })
+            : Promise.resolve([]),
+          enabledSources.hackernews !== false
+            ? searchHackerNews(keywords, 20).catch(err => {
+                console.error(`[discover] HackerNews search failed:`, err);
+                return [];
+              })
+            : Promise.resolve([]),
         ]);
         
         // Process Twitter results
