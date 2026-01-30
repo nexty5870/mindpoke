@@ -180,6 +180,7 @@ export default function AppPage() {
         interest={interests.find(i => i.id === editingInterestId) || null}
         onSave={handleSaveInterest}
         onDelete={handleDeleteInterest}
+        discoveryCount={editingInterestId ? discoveries.filter(d => d.matchedInterests.includes(editingInterestId)).length : 0}
       />
 
       <IngestPanel

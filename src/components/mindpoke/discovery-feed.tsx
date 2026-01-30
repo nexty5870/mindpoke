@@ -1,6 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Bookmark,
   BookmarkCheck,
@@ -11,11 +12,14 @@ import {
   Heart,
   Repeat2,
   ArrowUp,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  Link2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNow } from "date-fns";
 import type { Discovery, Interest, DiscoverySource } from "@/types";
 
 interface DiscoveryFeedProps {
@@ -54,6 +58,34 @@ function decodeHtmlEntities(text: string): string {
   return text.replace(/&amp;|&lt;|&gt;|&quot;|&#39;|&apos;|&nbsp;/g, (match) => entities[match] || match);
 }
 
+// Format large numbers
+function formatNumber(num: number | undefined): string {
+  if (num === undefined) return "—";
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return num.toString();
+}
+
+// Thread tweet type from API
+interface ThreadTweet {
+  id: string;
+  text: string;
+  author: {
+    username: string;
+    name: string;
+  };
+  createdAt: string;
+  likeCount: number;
+  retweetCount: number;
+  replyCount: number;
+}
+
+interface ThreadData {
+  mainTweet: ThreadTweet;
+  thread: ThreadTweet[];
+  isThread: boolean;
+}
+
 interface DiscoveryCardProps {
   discovery: Discovery;
   interests: Interest[];
@@ -62,16 +94,45 @@ interface DiscoveryCardProps {
 }
 
 function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: DiscoveryCardProps) {
-  const handleSave = async () => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [threadData, setThreadData] = useState<ThreadData | null>(null);
+  const [isLoadingThread, setIsLoadingThread] = useState(false);
+  const [threadError, setThreadError] = useState<string | null>(null);
+
+  const handleSave = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (onUpdateStatus) {
       await onUpdateStatus(discovery.id, discovery.status === "saved" ? "read" : "saved");
     }
   };
 
-  const handleDismiss = async () => {
+  const handleDismiss = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (onUpdateStatus) {
       await onUpdateStatus(discovery.id, "dismissed");
     }
+  };
+
+  const handleCardClick = async () => {
+    if (!isExpanded && discovery.source === "x" && !threadData) {
+      // Fetch thread data when expanding for X/Twitter posts
+      setIsLoadingThread(true);
+      setThreadError(null);
+      try {
+        const res = await fetch(`/api/discoveries/thread?id=${discovery.sourceId}`);
+        const data = await res.json();
+        if (data.success) {
+          setThreadData(data.data);
+        } else {
+          setThreadError(data.error || "Failed to load thread");
+        }
+      } catch (err) {
+        setThreadError("Network error loading thread");
+      } finally {
+        setIsLoadingThread(false);
+      }
+    }
+    setIsExpanded(!isExpanded);
   };
 
   const matchedInterestNames = discovery.matchedInterests
@@ -80,6 +141,11 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
 
   const timestamp = new Date(discovery.publishedAt).toISOString();
 
+  // Build direct X link
+  const xUrl = discovery.source === "x" && discovery.authorHandle
+    ? `https://x.com/${discovery.authorHandle}/status/${discovery.sourceId}`
+    : discovery.url;
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -20 }}
@@ -87,11 +153,14 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
       transition={{ delay: index * 0.03 }}
     >
       <div className={cn(
-        "border bg-[#111113] transition-none group",
+        "border bg-[#111113] transition-none group cursor-pointer",
         discovery.status === "new" 
           ? "border-[#2a2a30] hover:border-[#00d4aa]" 
-          : "border-[#1a1a1f] opacity-70"
-      )}>
+          : "border-[#1a1a1f] opacity-70",
+        isExpanded && "border-[#00d4aa]"
+      )}
+      onClick={handleCardClick}
+      >
         {/* Card Header - Terminal Style */}
         <div className="px-4 py-2 border-b border-[#2a2a30] flex items-center justify-between bg-[#0a0a0f]">
           <div className="flex items-center gap-3">
@@ -114,10 +183,18 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
             ))}
           </div>
 
-          {/* Timestamp */}
-          <span className="font-terminal text-[10px] text-[#555555]">
-            {timestamp}
-          </span>
+          <div className="flex items-center gap-3">
+            {/* Timestamp */}
+            <span className="font-terminal text-[10px] text-[#555555]">
+              {timestamp}
+            </span>
+            {/* Expand indicator */}
+            {isExpanded ? (
+              <ChevronUp className="w-4 h-4 text-[#00d4aa]" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-[#555555]" />
+            )}
+          </div>
         </div>
 
         <div className="p-4 flex gap-4">
@@ -152,8 +229,11 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
               {decodeHtmlEntities(discovery.title)}
             </h3>
 
-            {/* Summary - Terminal */}
-            <p className="font-terminal text-xs text-[#888888] mb-3 line-clamp-2">
+            {/* Summary - Terminal (truncated when collapsed) */}
+            <p className={cn(
+              "font-terminal text-xs text-[#888888] mb-3",
+              !isExpanded && "line-clamp-2"
+            )}>
               {decodeHtmlEntities(discovery.summary)}
             </p>
 
@@ -190,7 +270,9 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
               </div>
 
               {/* Actions - ASCII Style */}
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-none">
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-none"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <Button 
                   variant="ghost" 
                   size="icon" 
@@ -236,6 +318,122 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
             </div>
           </div>
         </div>
+
+        {/* Expanded Content */}
+        <AnimatePresence>
+          {isExpanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              className="overflow-hidden"
+            >
+              <div className="border-t border-[#2a2a30] bg-[#0a0a0f]">
+                {/* Engagement Metrics Bar */}
+                <div className="px-4 py-3 border-b border-[#2a2a30] flex items-center gap-6">
+                  <span className="font-terminal text-[10px] text-[#555555]">ENGAGEMENT::</span>
+                  <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2">
+                      <Heart className="w-4 h-4 text-[#ff4444]" />
+                      <span className="font-terminal text-sm text-white">
+                        {formatNumber(discovery.engagementMetrics.likes)}
+                      </span>
+                      <span className="font-terminal text-[10px] text-[#555555]">LIKES</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Repeat2 className="w-4 h-4 text-[#00d4aa]" />
+                      <span className="font-terminal text-sm text-white">
+                        {formatNumber(discovery.engagementMetrics.retweets)}
+                      </span>
+                      <span className="font-terminal text-[10px] text-[#555555]">RETWEETS</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MessageCircle className="w-4 h-4 text-[#ffb000]" />
+                      <span className="font-terminal text-sm text-white">
+                        {formatNumber(discovery.engagementMetrics.comments)}
+                      </span>
+                      <span className="font-terminal text-[10px] text-[#555555]">REPLIES</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Thread Content or Loading */}
+                <div className="p-4">
+                  {isLoadingThread ? (
+                    <div className="flex items-center gap-3 py-4">
+                      <Loader2 className="w-4 h-4 text-[#00d4aa] animate-spin" />
+                      <span className="font-terminal text-xs text-[#888888]">
+                        LOADING_THREAD_DATA...
+                      </span>
+                    </div>
+                  ) : threadError ? (
+                    <div className="py-2">
+                      <span className="font-terminal text-xs text-[#ff4444]">
+                        ERR:: {threadError}
+                      </span>
+                    </div>
+                  ) : threadData?.isThread && threadData.thread.length > 0 ? (
+                    <div className="space-y-4">
+                      <div className="font-terminal text-[10px] text-[#00d4aa] mb-2">
+                        ── THREAD ({threadData.thread.length} POSTS) ──
+                      </div>
+                      {threadData.thread.map((tweet, i) => (
+                        <div key={tweet.id} className="relative pl-4">
+                          {/* Thread connector line */}
+                          {i < threadData.thread.length - 1 && (
+                            <div className="absolute left-1 top-6 bottom-0 w-px bg-[#2a2a30]" />
+                          )}
+                          <div className="absolute left-0 top-2 w-2 h-2 border border-[#00d4aa] bg-[#0a0a0f]" />
+                          
+                          <div className="pb-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-terminal text-[10px] text-[#00d4aa]">
+                                @{tweet.author.username}
+                              </span>
+                              <span className="font-terminal text-[10px] text-[#555555]">
+                                {new Date(tweet.createdAt).toLocaleTimeString()}
+                              </span>
+                            </div>
+                            <p className="font-terminal text-xs text-[#cccccc] whitespace-pre-wrap">
+                              {decodeHtmlEntities(tweet.text)}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="font-terminal text-xs text-[#888888]">
+                      {discovery.source === "x" 
+                        ? "SINGLE_POST :: No thread detected"
+                        : "FULL_CONTENT_ABOVE"
+                      }
+                    </div>
+                  )}
+                </div>
+
+                {/* Direct Link Footer */}
+                <div className="px-4 py-3 border-t border-[#2a2a30] flex items-center justify-between">
+                  <a 
+                    href={xUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-[#ffb000] hover:text-[#ffc033] transition-none"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Link2 className="w-4 h-4" />
+                    <span className="font-terminal text-xs">
+                      OPEN_IN_{discovery.source.toUpperCase()}
+                    </span>
+                  </a>
+                  <span className="font-terminal text-[10px] text-[#555555]">
+                    ID: {discovery.sourceId}
+                  </span>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </motion.div>
   );
