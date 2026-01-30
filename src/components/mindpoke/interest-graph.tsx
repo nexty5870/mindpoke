@@ -228,7 +228,7 @@ export function InterestGraph({
 
     simulationRef.current = simulation;
 
-    return () => simulation.stop();
+    return () => { simulation.stop(); };
   }, [graphData, dimensions]);
 
   // Drag handlers

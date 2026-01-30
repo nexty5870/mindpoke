@@ -17,6 +17,7 @@ export default function AppPage() {
     discoveries,
     isLoading,
     addInterest,
+    updateInterest,
     addDiscoveries,
     updateDiscoveryStatus,
   } = useMindpokeData();
@@ -24,6 +25,8 @@ export default function AppPage() {
   const [selectedInterest, setSelectedInterest] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isIngestPanelOpen, setIsIngestPanelOpen] = useState(false);
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
+  const [suggestionsInterestId, setSuggestionsInterestId] = useState<string | null>(null);
   const [view, setView] = useState<"graph" | "feed">("graph");
   const [isDiscovering, setIsDiscovering] = useState(false);
 
@@ -33,6 +36,19 @@ export default function AppPage() {
     await addInterest(interest);
     setIsAddDialogOpen(false);
   }, [addInterest]);
+
+  const handleSuggestKeywords = useCallback((interestId: string) => {
+    setSuggestionsInterestId(interestId);
+    setIsSuggestionsOpen(true);
+  }, []);
+
+  const handleAddKeywords = useCallback(async (keywords: string[]) => {
+    if (!suggestionsInterestId) return;
+    const interest = interests.find(i => i.id === suggestionsInterestId);
+    if (!interest) return;
+    const newKeywords = [...interest.keywords, ...keywords];
+    await updateInterest(suggestionsInterestId, { keywords: newKeywords });
+  }, [suggestionsInterestId, interests, updateInterest]);
 
   const handleDiscover = useCallback(async () => {
     setIsDiscovering(true);
@@ -87,6 +103,7 @@ export default function AppPage() {
         onIngestBookmarks={() => setIsIngestPanelOpen(true)}
         onDiscover={handleDiscover}
         isDiscovering={isDiscovering}
+        onSuggestKeywords={handleSuggestKeywords}
       />
       
       <main className="flex-1 flex flex-col overflow-hidden">
@@ -126,6 +143,16 @@ export default function AppPage() {
         onAddInterest={handleAddInterest}
         existingInterests={interests}
       />
+
+      {suggestionsInterestId && (
+        <KeywordSuggestions
+          interestId={suggestionsInterestId}
+          interestName={interests.find(i => i.id === suggestionsInterestId)?.name || ""}
+          open={isSuggestionsOpen}
+          onOpenChange={setIsSuggestionsOpen}
+          onAddKeywords={handleAddKeywords}
+        />
+      )}
     </div>
   );
 }
