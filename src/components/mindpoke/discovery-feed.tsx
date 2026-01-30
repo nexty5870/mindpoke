@@ -228,11 +228,14 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
 }
 
 export function DiscoveryFeed({ discoveries, interests, onUpdateStatus }: DiscoveryFeedProps) {
-  const sortedDiscoveries = [...discoveries].sort((a, b) => {
-    if (a.status === "new" && b.status !== "new") return -1;
-    if (a.status !== "new" && b.status === "new") return 1;
-    return b.relevanceScore - a.relevanceScore;
-  });
+  // Filter out dismissed items and sort by status then relevance
+  const sortedDiscoveries = [...discoveries]
+    .filter((d) => d.status !== "dismissed")
+    .sort((a, b) => {
+      if (a.status === "new" && b.status !== "new") return -1;
+      if (a.status !== "new" && b.status === "new") return 1;
+      return b.relevanceScore - a.relevanceScore;
+    });
 
   const newCount = discoveries.filter((d) => d.status === "new").length;
 
