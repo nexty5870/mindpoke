@@ -53,7 +53,7 @@ export async function GET(request: Request) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        minRelevance: 80, // High bar for notifications
+        minRelevance: 55, // Moderate bar for notifications (60%+ match)
         maxPokes: 3,
         dryRun: false, // Record the pokes
       }),
