@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Settings, Zap } from "lucide-react";
+import { Bookmark, Plus, Settings, Zap, Search, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,9 @@ interface SidebarProps {
   selectedInterest: string | null;
   onSelectInterest: (id: string | null) => void;
   onAddInterest: () => void;
+  onIngestBookmarks: () => void;
+  onDiscover: () => void;
+  isDiscovering: boolean;
 }
 
 export function Sidebar({
@@ -18,6 +21,9 @@ export function Sidebar({
   selectedInterest,
   onSelectInterest,
   onAddInterest,
+  onIngestBookmarks,
+  onDiscover,
+  isDiscovering,
 }: SidebarProps) {
   const getHeatLevel = (interest: Interest) => {
     const ratio = interest.engagementCount / (interest.engagementCount + interest.dismissCount + 1);
@@ -54,6 +60,40 @@ export function Sidebar({
         <div className="text-[#555555] mt-1">
           LAST_SYNC: {formatTimestamp()}
         </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="p-3 border-b border-[#2a2a30] space-y-2">
+        <Button
+          onClick={onDiscover}
+          disabled={isDiscovering || interests.length === 0}
+          className={cn(
+            "w-full justify-start font-terminal text-xs border",
+            isDiscovering
+              ? "bg-[#00d4aa]/20 border-[#00d4aa] text-[#00d4aa]"
+              : "bg-transparent border-[#2a2a30] text-[#888888] hover:border-[#00d4aa] hover:text-[#00d4aa] hover:bg-transparent"
+          )}
+        >
+          {isDiscovering ? (
+            <>
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              SCANNING...
+            </>
+          ) : (
+            <>
+              <Search className="w-4 h-4 mr-2" />
+              $ DISCOVER_NOW
+            </>
+          )}
+        </Button>
+        
+        <Button
+          onClick={onIngestBookmarks}
+          className="w-full justify-start font-terminal text-xs bg-transparent border border-[#2a2a30] text-[#888888] hover:border-[#ffb000] hover:text-[#ffb000] hover:bg-transparent"
+        >
+          <Bookmark className="w-4 h-4 mr-2" />
+          $ INGEST_BOOKMARKS
+        </Button>
       </div>
 
       {/* Module Header */}

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { InterestGraph } from "@/components/mindpoke/interest-graph";
 import { DiscoveryFeed } from "@/components/mindpoke/discovery-feed";
 import { Sidebar } from "@/components/mindpoke/sidebar";
 import { Header } from "@/components/mindpoke/header";
 import { AddInterestDialog } from "@/components/mindpoke/add-interest-dialog";
+import { IngestPanel } from "@/components/mindpoke/ingest-panel";
 import type { Interest, Discovery } from "@/types";
 
 // Mock data for initial development
@@ -120,12 +121,14 @@ const mockDiscoveries: Discovery[] = [
 
 export default function Home() {
   const [interests, setInterests] = useState<Interest[]>(mockInterests);
-  const [discoveries] = useState<Discovery[]>(mockDiscoveries);
+  const [discoveries, setDiscoveries] = useState<Discovery[]>(mockDiscoveries);
   const [selectedInterest, setSelectedInterest] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isIngestPanelOpen, setIsIngestPanelOpen] = useState(false);
   const [view, setView] = useState<"graph" | "feed">("graph");
+  const [isDiscovering, setIsDiscovering] = useState(false);
 
-  const handleAddInterest = (interest: Omit<Interest, "id" | "createdAt" | "updatedAt" | "engagementCount" | "dismissCount">) => {
+  const handleAddInterest = useCallback((interest: Omit<Interest, "id" | "createdAt" | "updatedAt" | "engagementCount" | "dismissCount">) => {
     const newInterest: Interest = {
       ...interest,
       id: crypto.randomUUID(),
@@ -136,7 +139,41 @@ export default function Home() {
     };
     setInterests((prev) => [...prev, newInterest]);
     setIsAddDialogOpen(false);
-  };
+  }, []);
+
+  const handleDiscover = useCallback(async () => {
+    if (interests.length === 0) return;
+    
+    setIsDiscovering(true);
+    try {
+      const response = await fetch("/api/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          interests,
+          minRelevance: 40,
+          maxResults: 30,
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.data.discoveries.length > 0) {
+        // Add new discoveries, avoiding duplicates
+        setDiscoveries((prev) => {
+          const existingIds = new Set(prev.map((d) => d.sourceId));
+          const newDiscoveries = data.data.discoveries.filter(
+            (d: Discovery) => !existingIds.has(d.sourceId)
+          );
+          return [...newDiscoveries, ...prev];
+        });
+      }
+    } catch (error) {
+      console.error("Discovery failed:", error);
+    } finally {
+      setIsDiscovering(false);
+    }
+  }, [interests]);
 
   const filteredDiscoveries = selectedInterest
     ? discoveries.filter((d) => d.matchedInterests.includes(selectedInterest))
@@ -149,6 +186,9 @@ export default function Home() {
         selectedInterest={selectedInterest}
         onSelectInterest={setSelectedInterest}
         onAddInterest={() => setIsAddDialogOpen(true)}
+        onIngestBookmarks={() => setIsIngestPanelOpen(true)}
+        onDiscover={handleDiscover}
+        isDiscovering={isDiscovering}
       />
       
       <main className="flex-1 flex flex-col overflow-hidden">
@@ -179,6 +219,13 @@ export default function Home() {
         open={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
         onAdd={handleAddInterest}
+      />
+
+      <IngestPanel
+        isOpen={isIngestPanelOpen}
+        onClose={() => setIsIngestPanelOpen(false)}
+        onAddInterest={handleAddInterest}
+        existingInterests={interests}
       />
     </div>
   );
