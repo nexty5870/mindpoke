@@ -20,12 +20,13 @@ function mapInterest(db: Record<string, unknown>): Interest {
 
 function mapDiscovery(db: Record<string, unknown>): Discovery {
   const metadata = (db.metadata || {}) as Record<string, unknown>;
+  const sourceType = db.sourceType as string;
   return {
     id: db.id as string,
     title: (db.title as string) || "",
     summary: (db.content as string) || "",
     url: (db.sourceUrl as string) || "",
-    source: (db.sourceType as Discovery["source"]) || "x",
+    source: (sourceType === "twitter" ? "x" : sourceType) as Discovery["source"],
     sourceId: db.sourceId as string,
     author: db.author as string,
     authorHandle: db.authorHandle as string,
