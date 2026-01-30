@@ -3,6 +3,18 @@ import { searchTweets, calculateRelevance, type Tweet } from "@/lib/sources/bird
 import { db } from "@/lib/db";
 import { discoveries, interests as interestsTable } from "@/lib/db/schema";
 import type { Discovery, DiscoverySource } from "@/types";
+import { franc } from "franc-min";
+
+// Detect if text is English (returns true if English or undetermined for short text)
+function isEnglish(text: string): boolean {
+  // Skip very short texts - can't reliably detect
+  if (text.length < 20) return true;
+  
+  const lang = franc(text);
+  // 'und' means undetermined (too short/ambiguous)
+  // Allow English and undetermined
+  return lang === "eng" || lang === "und";
+}
 
 function tweetToDbDiscovery(tweet: Tweet, interest: { id: string; keywords: string[] }) {
   return {
@@ -97,8 +109,15 @@ export async function POST(request: Request) {
       try {
         const tweets = await searchTweets(query, 30);
         
-        // Filter out already-saved tweets
-        const newTweets = tweets.filter(t => !existingSourceIds.has(t.id));
+        // Filter out already-saved tweets and non-English content
+        const newTweets = tweets.filter(t => {
+          if (existingSourceIds.has(t.id)) return false;
+          if (!isEnglish(t.text)) {
+            console.log(`[discover] Skipping non-English tweet: ${t.text.slice(0, 50)}...`);
+            return false;
+          }
+          return true;
+        });
         
         // Convert to DB format and filter by relevance
         const dbDiscoveries = newTweets
