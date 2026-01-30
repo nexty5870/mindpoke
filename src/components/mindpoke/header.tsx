@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Bell, Network, List, Terminal, Send, X, ExternalLink } from "lucide-react";
+import { Icon } from "@iconify/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -210,8 +211,9 @@ export function Header({ view, onViewChange, discoveryCount }: HeaderProps) {
               {/* Send Poke Section */}
               {pokePreview && (
                 <div className="px-4 py-3 border-b border-[#2a2a30] bg-[#0a0a0f]">
-                  <div className="font-terminal text-[10px] text-[#ffb000] mb-2">
-                    ● READY_TO_POKE
+                  <div className="font-terminal text-[10px] text-[#ffb000] mb-2 flex items-center gap-1.5">
+                    <Icon icon="hugeicons:ai-brain-02" className="w-4 h-4" />
+                    READY_TO_POKE
                   </div>
                   <div className="font-terminal text-[10px] text-[#888888] mb-3 line-clamp-3">
                     {pokePreview.split('\n').slice(0, 3).join(' ')}...
