@@ -22,6 +22,33 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { Discovery, Interest, DiscoverySource } from "@/types";
 
+// Source Icons as SVG components
+const XIcon = () => (
+  <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
+
+const RedditIcon = () => (
+  <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor">
+    <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/>
+  </svg>
+);
+
+const HNIcon = () => (
+  <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor">
+    <path d="M0 0v24h24V0H0zm12.3 12.8v5.5h-1.4v-5.5L7.3 5.8h1.6l2.7 5.4 2.7-5.4h1.6l-3.6 7z"/>
+  </svg>
+);
+
+const SourceIcons: Record<DiscoverySource, React.FC> = {
+  x: XIcon,
+  reddit: RedditIcon,
+  hackernews: HNIcon,
+  rss: () => <Link2 className="w-3 h-3" />,
+  arxiv: () => <Link2 className="w-3 h-3" />,
+};
+
 interface DiscoveryFeedProps {
   discoveries: Discovery[];
   interests: Interest[];
@@ -29,19 +56,19 @@ interface DiscoveryFeedProps {
 }
 
 const sourceLabels: Record<DiscoverySource, string> = {
-  x: "X_NETWORK",
-  reddit: "REDDIT",
-  hackernews: "HN_FEED",
-  rss: "RSS_STREAM",
-  arxiv: "ARXIV_DB",
+  x: "X",
+  reddit: "Reddit",
+  hackernews: "HN",
+  rss: "RSS",
+  arxiv: "arXiv",
 };
 
 const sourceColors: Record<DiscoverySource, string> = {
-  x: "border-[#888888] text-[#888888]",
-  reddit: "border-[#ff4500] text-[#ff4500]",
-  hackernews: "border-[#ff6600] text-[#ff6600]",
-  rss: "border-[#00d4aa] text-[#00d4aa]",
-  arxiv: "border-[#b31b1b] text-[#b31b1b]",
+  x: "border-[#1DA1F2] text-[#1DA1F2] bg-[#1DA1F2]/10",
+  reddit: "border-[#FF4500] text-[#FF4500] bg-[#FF4500]/10",
+  hackernews: "border-[#FF6600] text-[#FF6600] bg-[#FF6600]/10",
+  rss: "border-[#00d4aa] text-[#00d4aa] bg-[#00d4aa]/10",
+  arxiv: "border-[#b31b1b] text-[#b31b1b] bg-[#b31b1b]/10",
 };
 
 // Decode HTML entities
@@ -164,13 +191,19 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
         {/* Card Header - Terminal Style */}
         <div className="px-4 py-2 border-b border-[#2a2a30] flex items-center justify-between bg-[#0a0a0f]">
           <div className="flex items-center gap-3">
-            {/* Source badge */}
-            <span className={cn(
-              "font-terminal text-[10px] px-2 py-0.5 border",
-              sourceColors[discovery.source]
-            )}>
-              {sourceLabels[discovery.source]}
-            </span>
+            {/* Source badge with icon */}
+            {(() => {
+              const Icon = SourceIcons[discovery.source];
+              return (
+                <span className={cn(
+                  "font-terminal text-[10px] px-2 py-0.5 border flex items-center gap-1.5",
+                  sourceColors[discovery.source]
+                )}>
+                  {Icon && <Icon />}
+                  {sourceLabels[discovery.source]}
+                </span>
+              );
+            })()}
             
             {/* Matched interests */}
             {matchedInterestNames.map((name) => (
