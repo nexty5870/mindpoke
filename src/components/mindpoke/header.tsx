@@ -59,8 +59,20 @@ interface HeaderProps {
   discoveryCount: number;
 }
 
+// Terminal-style progress bar
+function ProgressBar({ progress, width = 8 }: { progress: number; width?: number }) {
+  const filled = Math.round((progress / 100) * width);
+  const empty = width - filled;
+  return (
+    <span className="font-terminal text-[10px]">
+      <span className="text-[#00d4aa]">{"█".repeat(filled)}</span>
+      <span className="text-[#2a2a30]">{"█".repeat(empty)}</span>
+    </span>
+  );
+}
+
 export function Header({ view, onViewChange, discoveryCount }: HeaderProps) {
-  const timestamp = new Date().toISOString();
+  const [currentTime, setCurrentTime] = useState(new Date());
   const [showNotifications, setShowNotifications] = useState(false);
   const [pokes, setPokes] = useState<Poke[]>([]);
   const [discoveries, setDiscoveries] = useState<Discovery[]>([]);
@@ -70,7 +82,55 @@ export function Header({ view, onViewChange, discoveryCount }: HeaderProps) {
   const [isSendingPoke, setIsSendingPoke] = useState(false);
   const [pokePreview, setPokePreview] = useState<string | null>(null);
   const [cronStatus, setCronStatus] = useState<CronStatus | null>(null);
+  const [intervalHours, setIntervalHours] = useState(4); // default 4h
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Update time every minute for progress bar
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Fetch settings and cron status on mount
+  useEffect(() => {
+    fetchCronStatus();
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch("/api/settings");
+      const data = await res.json();
+      if (data.success && data.data?.discoverIntervalHours) {
+        setIntervalHours(data.data.discoverIntervalHours);
+      }
+    } catch (e) {
+      console.error("Failed to fetch settings:", e);
+    }
+  };
+
+  // Calculate progress to next run
+  const getNextRunProgress = () => {
+    if (!cronStatus?.lastRun?.completedAt) return { progress: 0, timeLeft: "—" };
+    
+    const lastRun = new Date(cronStatus.lastRun.completedAt).getTime();
+    const intervalMs = intervalHours * 60 * 60 * 1000;
+    const nextRun = lastRun + intervalMs;
+    const now = currentTime.getTime();
+    
+    const elapsed = now - lastRun;
+    const progress = Math.min(100, (elapsed / intervalMs) * 100);
+    
+    const remaining = Math.max(0, nextRun - now);
+    const remainingMin = Math.floor(remaining / 60000);
+    const timeLeft = remainingMin >= 60 
+      ? `${Math.floor(remainingMin / 60)}h${remainingMin % 60}m`
+      : `${remainingMin}m`;
+    
+    return { progress, timeLeft: remaining > 0 ? timeLeft : "soon" };
+  };
+
+  const { progress: nextRunProgress, timeLeft } = getNextRunProgress();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -231,9 +291,11 @@ export function Header({ view, onViewChange, discoveryCount }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-4">
-        {/* Timestamp */}
-        <div className="font-terminal text-[10px] text-[#555555]">
-          {timestamp}
+        {/* Next Run Progress */}
+        <div className="flex items-center gap-2 font-terminal text-[10px]">
+          <span className="text-[#555555]">NEXT_RUN</span>
+          <ProgressBar progress={nextRunProgress} width={8} />
+          <span className="text-[#888888]">{timeLeft}</span>
         </div>
 
         {/* Notifications */}
