@@ -5,6 +5,12 @@ import type { Interest, Discovery } from "@/types";
 
 // Map DB schema to frontend types
 function mapInterest(db: Record<string, unknown>): Interest {
+  // heat is 0-100 in DB, map to engagement/dismiss counts for sidebar display
+  const heat = (db.heat as number) ?? 50;
+  // Scale heat (0-100) to engagement ratio that produces 0-5 heat bars
+  // heat=100 → engagementCount=5, heat=0 → engagementCount=0
+  const scaledEngagement = Math.round(heat / 20);
+  
   return {
     id: db.id as string,
     name: db.name as string,
@@ -13,10 +19,11 @@ function mapInterest(db: Record<string, unknown>): Interest {
     priority: db.priority === "high" ? 5 : db.priority === "medium" ? 3 : 1,
     createdAt: new Date(db.createdAt as string),
     updatedAt: new Date(db.updatedAt as string),
-    engagementCount: 0, // TODO: calculate from discoveries
+    engagementCount: scaledEngagement,
     dismissCount: 0,
     positionX: db.positionX as number | null | undefined,
     positionY: db.positionY as number | null | undefined,
+    heat, // pass raw heat value too
   };
 }
 

@@ -6,6 +6,7 @@ import { DiscoveryFeed } from "@/components/mindpoke/discovery-feed";
 import { Sidebar } from "@/components/mindpoke/sidebar";
 import { Header } from "@/components/mindpoke/header";
 import { AddInterestDialog } from "@/components/mindpoke/add-interest-dialog";
+import { EditInterestDialog } from "@/components/mindpoke/edit-interest-dialog";
 import { IngestPanel } from "@/components/mindpoke/ingest-panel";
 import { KeywordSuggestions } from "@/components/mindpoke/keyword-suggestions";
 import { useMindpokeData } from "@/hooks/use-mindpoke-data";
@@ -18,17 +19,21 @@ export default function AppPage() {
     isLoading,
     addInterest,
     updateInterest,
+    deleteInterest,
     addDiscoveries,
     updateDiscoveryStatus,
   } = useMindpokeData();
 
   const [selectedInterest, setSelectedInterest] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingInterestId, setEditingInterestId] = useState<string | null>(null);
   const [isIngestPanelOpen, setIsIngestPanelOpen] = useState(false);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
   const [suggestionsInterestId, setSuggestionsInterestId] = useState<string | null>(null);
   const [view, setView] = useState<"graph" | "feed">("graph");
   const [isDiscovering, setIsDiscovering] = useState(false);
+  const [discoveryStats, setDiscoveryStats] = useState<{ interestId: string; count: number }[] | null>(null);
 
   const handleAddInterest = useCallback(async (
     interest: Omit<Interest, "id" | "createdAt" | "updatedAt" | "engagementCount" | "dismissCount">
@@ -41,6 +46,22 @@ export default function AppPage() {
     setSuggestionsInterestId(interestId);
     setIsSuggestionsOpen(true);
   }, []);
+
+  const handleEditInterest = useCallback((interestId: string) => {
+    setEditingInterestId(interestId);
+    setIsEditDialogOpen(true);
+  }, []);
+
+  const handleSaveInterest = useCallback(async (id: string, updates: Partial<Interest>) => {
+    await updateInterest(id, updates);
+  }, [updateInterest]);
+
+  const handleDeleteInterest = useCallback(async (id: string) => {
+    await deleteInterest(id);
+    if (selectedInterest === id) {
+      setSelectedInterest(null);
+    }
+  }, [deleteInterest, selectedInterest]);
 
   const handleAddKeywords = useCallback(async (keywords: string[]) => {
     if (!suggestionsInterestId) return;
@@ -67,6 +88,20 @@ export default function AppPage() {
       
       if (data.success && data.data.discoveries.length > 0) {
         addDiscoveries(data.data.discoveries);
+        
+        // Per-interest breakdown for node animations
+        if (data.data.stats?.byInterest) {
+          const stats = data.data.stats.byInterest
+            .filter((s: { relevant: number }) => s.relevant > 0)
+            .map((s: { id: string; relevant: number }) => ({
+              interestId: s.id,
+              count: s.relevant,
+            }));
+          setDiscoveryStats(stats);
+          
+          // Reset after animation
+          setTimeout(() => setDiscoveryStats(null), 2500);
+        }
       }
     } catch (error) {
       console.error("Discovery failed:", error);
@@ -104,6 +139,7 @@ export default function AppPage() {
         onDiscover={handleDiscover}
         isDiscovering={isDiscovering}
         onSuggestKeywords={handleSuggestKeywords}
+        onEditInterest={handleEditInterest}
       />
       
       <main className="flex-1 flex flex-col overflow-hidden">
@@ -120,6 +156,7 @@ export default function AppPage() {
               discoveries={discoveries}
               selectedInterest={selectedInterest}
               onSelectInterest={setSelectedInterest}
+              newDiscoveries={discoveryStats}
             />
           ) : (
             <DiscoveryFeed
@@ -135,6 +172,14 @@ export default function AppPage() {
         open={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
         onAdd={handleAddInterest}
+      />
+
+      <EditInterestDialog
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        interest={interests.find(i => i.id === editingInterestId) || null}
+        onSave={handleSaveInterest}
+        onDelete={handleDeleteInterest}
       />
 
       <IngestPanel
@@ -153,6 +198,7 @@ export default function AppPage() {
           onAddKeywords={handleAddKeywords}
         />
       )}
+
     </div>
   );
 }

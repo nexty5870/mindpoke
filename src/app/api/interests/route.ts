@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       keywords: keywords || [],
       priority: priority || "medium",
       color: color || "#00d4aa",
-      heat: 50,
+      heat: 10, // Start cold, earn heat through engagement
       positionX,
       positionY,
     }).returning();

@@ -17,11 +17,17 @@ import { Icon } from "@iconify/react";
 import { cn } from "@/lib/utils";
 import type { Interest, Discovery } from "@/types";
 
+interface DiscoveryStat {
+  interestId: string;
+  count: number;
+}
+
 interface InterestGraphProps {
   interests: Interest[];
   discoveries: Discovery[];
   selectedInterest: string | null;
   onSelectInterest: (id: string | null) => void;
+  newDiscoveries?: DiscoveryStat[] | null; // Per-node discovery counts from latest scan
 }
 
 interface GraphNode extends SimulationNodeDatum {
@@ -126,7 +132,30 @@ export function InterestGraph({
   discoveries,
   selectedInterest,
   onSelectInterest,
+  newDiscoveries,
 }: InterestGraphProps) {
+  // Track floating "+X" animations per node
+  const [nodeAnimations, setNodeAnimations] = useState<Map<string, number>>(new Map());
+
+  // Trigger animations when newDiscoveries changes
+  useEffect(() => {
+    if (newDiscoveries && newDiscoveries.length > 0) {
+      const animMap = new Map<string, number>();
+      newDiscoveries.forEach(d => {
+        if (d.count > 0) {
+          animMap.set(d.interestId, d.count);
+        }
+      });
+      setNodeAnimations(animMap);
+      
+      // Clear animations after they complete
+      const timeout = setTimeout(() => {
+        setNodeAnimations(new Map());
+      }, 2000);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [newDiscoveries]);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [nodes, setNodes] = useState<GraphNode[]>([]);
@@ -415,6 +444,23 @@ export function InterestGraph({
                       <Icon icon="icon-park-twotone:pin" className="w-3 h-3 text-[#00d4aa]" />
                     </div>
                   )}
+
+                  {/* Floating +X animation */}
+                  <AnimatePresence>
+                    {nodeAnimations.has(node.id) && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 0, scale: 0.5 }}
+                        animate={{ opacity: [0, 1, 1, 0], y: -40, scale: [0.5, 1.1, 1, 0.9] }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 1.5, ease: "easeOut" }}
+                        className="absolute -top-3 left-1/2 -translate-x-1/2 pointer-events-none"
+                      >
+                        <span className="font-terminal text-lg font-bold text-[#00d4aa] drop-shadow-[0_0_8px_rgba(0,212,170,0.8)]">
+                          +{nodeAnimations.get(node.id)}
+                        </span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </motion.div>
             );

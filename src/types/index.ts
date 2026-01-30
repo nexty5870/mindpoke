@@ -12,6 +12,7 @@ export interface Interest {
   lastEngagedAt?: Date;
   engagementCount: number;
   dismissCount: number;
+  heat?: number; // 0-100 heat value from database
   // Graph position (saved by user)
   positionX?: number | null;
   positionY?: number | null;

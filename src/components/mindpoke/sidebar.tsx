@@ -1,6 +1,6 @@
 "use client";
 
-import { Bookmark, Plus, Settings, Zap, Search, RefreshCw, Sparkles } from "lucide-react";
+import { Bookmark, Plus, Settings, Zap, Search, RefreshCw, Sparkles, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ interface SidebarProps {
   onDiscover: () => void;
   isDiscovering: boolean;
   onSuggestKeywords?: (interestId: string) => void;
+  onEditInterest?: (interestId: string) => void;
 }
 
 export function Sidebar({
@@ -26,8 +27,14 @@ export function Sidebar({
   onDiscover,
   isDiscovering,
   onSuggestKeywords,
+  onEditInterest,
 }: SidebarProps) {
   const getHeatLevel = (interest: Interest) => {
+    // Use heat directly if available (0-100 scale), convert to 0-5
+    if (interest.heat !== undefined) {
+      return Math.round(interest.heat / 20);
+    }
+    // Fallback to ratio calculation
     const ratio = interest.engagementCount / (interest.engagementCount + interest.dismissCount + 1);
     return Math.round(ratio * 5);
   };
@@ -187,18 +194,34 @@ export function Sidebar({
                   {interest.priority}
                 </div>
 
-                {/* Suggest keywords button */}
-                {onSuggestKeywords && selectedInterest === interest.id && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSuggestKeywords(interest.id);
-                    }}
-                    className="w-6 h-6 flex items-center justify-center border border-[#2a2a30] hover:border-[#00d4aa] text-[#888888] hover:text-[#00d4aa] transition-colors"
-                    title="Suggest keywords from saved discoveries"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                  </button>
+                {/* Action buttons for selected interest */}
+                {selectedInterest === interest.id && (
+                  <div className="flex gap-1">
+                    {onEditInterest && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditInterest(interest.id);
+                        }}
+                        className="w-6 h-6 flex items-center justify-center border border-[#2a2a30] hover:border-[#ffb000] text-[#888888] hover:text-[#ffb000] transition-colors"
+                        title="Edit interest"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    )}
+                    {onSuggestKeywords && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSuggestKeywords(interest.id);
+                        }}
+                        className="w-6 h-6 flex items-center justify-center border border-[#2a2a30] hover:border-[#00d4aa] text-[#888888] hover:text-[#00d4aa] transition-colors"
+                        title="Suggest keywords from saved discoveries"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
                 )}
               </button>
             );

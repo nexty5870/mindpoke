@@ -3,17 +3,50 @@ import { searchTweets, calculateRelevance, type Tweet } from "@/lib/sources/bird
 import { db } from "@/lib/db";
 import { discoveries, interests as interestsTable } from "@/lib/db/schema";
 import type { Discovery, DiscoverySource } from "@/types";
-import { franc } from "franc-min";
 
-// Detect if text is English (returns true if English or undetermined for short text)
+// Non-Latin script ranges to block
+const NON_LATIN_REGEX = new RegExp([
+  '[\u0600-\u06FF]',      // Arabic
+  '[\u0750-\u077F]',      // Arabic Supplement
+  '[\u08A0-\u08FF]',      // Arabic Extended-A
+  '[\u4E00-\u9FFF]',      // CJK Unified
+  '[\u3400-\u4DBF]',      // CJK Extension A
+  '[\u3040-\u309F]',      // Hiragana
+  '[\u30A0-\u30FF]',      // Katakana
+  '[\uAC00-\uD7AF]',      // Korean Hangul
+  '[\u0400-\u04FF]',      // Cyrillic
+  '[\u0500-\u052F]',      // Cyrillic Supplement
+  '[\u0590-\u05FF]',      // Hebrew
+  '[\u0E00-\u0E7F]',      // Thai
+  '[\u0900-\u097F]',      // Devanagari (Hindi)
+  '[\u0980-\u09FF]',      // Bengali
+  '[\u0A80-\u0AFF]',      // Gujarati
+  '[\u0B00-\u0B7F]',      // Oriya
+  '[\u0B80-\u0BFF]',      // Tamil
+  '[\u0C00-\u0C7F]',      // Telugu
+  '[\u0C80-\u0CFF]',      // Kannada
+  '[\u0D00-\u0D7F]',      // Malayalam
+].join('|'));
+
+// Check if text is English (Latin script only)
 function isEnglish(text: string): boolean {
-  // Skip very short texts - can't reliably detect
-  if (text.length < 20) return true;
+  // Remove URLs, mentions, hashtags, emojis for cleaner check
+  const cleanText = text
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/@\w+/g, '')
+    .replace(/#\w+/g, '')
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // emojis
+    .trim();
   
-  const lang = franc(text);
-  // 'und' means undetermined (too short/ambiguous)
-  // Allow English and undetermined
-  return lang === "eng" || lang === "und";
+  // If mostly stripped, allow through
+  if (cleanText.length < 10) return true;
+  
+  // Block if ANY non-Latin characters found
+  if (NON_LATIN_REGEX.test(cleanText)) {
+    return false;
+  }
+  
+  return true;
 }
 
 function tweetToDbDiscovery(tweet: Tweet, interest: { id: string; keywords: string[] }) {
@@ -68,7 +101,7 @@ function dbToFrontendDiscovery(db: any): Discovery {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const minRelevance: number = body.minRelevance || 40;
+    const minRelevance: number = body.minRelevance || 25; // Lower default - single keyword can score ~30
     const maxResultsPerInterest: number = body.maxResultsPerInterest || 10;
     
     // ALWAYS fetch interests from database to get current keywords

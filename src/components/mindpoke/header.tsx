@@ -77,8 +77,8 @@ export function Header({ view, onViewChange, discoveryCount }: HeaderProps) {
         >
           <Bell className="w-4 h-4 text-[#888888]" />
           {discoveryCount > 0 && (
-            <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#ffb000] text-[#0a0a0f] text-[10px] font-terminal flex items-center justify-center">
-              {discoveryCount}
+            <span className="absolute -top-2 -right-2 min-w-5 h-5 px-1 bg-[#ffb000] text-[#0a0a0f] text-[10px] font-terminal font-bold flex items-center justify-center">
+              {discoveryCount > 99 ? "99+" : discoveryCount}
             </span>
           )}
         </Button>
