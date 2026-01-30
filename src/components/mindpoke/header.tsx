@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Bell, Network, List, Terminal, Send, X, ExternalLink, Clock, Zap, Moon } from "lucide-react";
+import { Bell, Network, List, Terminal, Send, X, ExternalLink, Clock, Zap, Moon, Search } from "lucide-react";
 import { Icon } from "@iconify/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -291,6 +291,16 @@ export function Header({ view, onViewChange, discoveryCount }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-4">
+        {/* Search Shortcut */}
+        <button
+          onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }))}
+          className="flex items-center gap-2 px-3 py-1.5 border border-[#2a2a30] hover:border-[#3a3a40] font-terminal text-[10px] text-[#555555] hover:text-[#888888]"
+        >
+          <Search className="w-3 h-3" />
+          <span>SEARCH</span>
+          <kbd className="ml-1 px-1 py-0.5 bg-[#1a1a1f] border border-[#2a2a30] text-[9px]">⌘K</kbd>
+        </button>
+
         {/* Next Run Progress */}
         <div className="flex items-center gap-2 font-terminal text-[10px]">
           <span className="text-[#555555]">NEXT_RUN</span>

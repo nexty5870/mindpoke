@@ -10,6 +10,7 @@ import { EditInterestDialog } from "@/components/mindpoke/edit-interest-dialog";
 import { IngestPanel } from "@/components/mindpoke/ingest-panel";
 import { KeywordSuggestions } from "@/components/mindpoke/keyword-suggestions";
 import { SettingsDialog } from "@/components/mindpoke/settings-dialog";
+import { CommandPalette, useCommandPalette } from "@/components/mindpoke/command-palette";
 import { useMindpokeData } from "@/hooks/use-mindpoke-data";
 import type { Interest } from "@/types";
 
@@ -36,6 +37,9 @@ export default function AppPage() {
   const [view, setView] = useState<"graph" | "feed">("graph");
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [discoveryStats, setDiscoveryStats] = useState<{ interestId: string; count: number }[] | null>(null);
+  
+  // Command palette (Cmd+K)
+  const commandPalette = useCommandPalette();
 
   const handleAddInterest = useCallback(async (
     interest: Omit<Interest, "id" | "createdAt" | "updatedAt" | "engagementCount" | "dismissCount">
@@ -206,6 +210,12 @@ export default function AppPage() {
       <SettingsDialog
         open={isSettingsOpen}
         onOpenChange={setIsSettingsOpen}
+      />
+
+      {/* Command Palette (Cmd+K) */}
+      <CommandPalette
+        isOpen={commandPalette.isOpen}
+        onClose={commandPalette.close}
       />
     </div>
   );
