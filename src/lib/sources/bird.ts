@@ -8,8 +8,8 @@ import { promisify } from "util";
 
 const execAsync = promisify(exec);
 
-// Path to bird CLI (installed in project)
-const BIRD_CMD = "npx bird";
+// Path to bird CLI - use full package name to avoid collision with unrelated 'bird' package
+const BIRD_CMD = "npx @steipete/bird";
 
 export interface Tweet {
   id: string;
