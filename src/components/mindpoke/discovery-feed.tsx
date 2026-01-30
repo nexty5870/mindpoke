@@ -40,6 +40,20 @@ const sourceColors: Record<DiscoverySource, string> = {
   arxiv: "border-[#b31b1b] text-[#b31b1b]",
 };
 
+// Decode HTML entities
+function decodeHtmlEntities(text: string): string {
+  const entities: Record<string, string> = {
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+    '&apos;': "'",
+    '&nbsp;': ' ',
+  };
+  return text.replace(/&amp;|&lt;|&gt;|&quot;|&#39;|&apos;|&nbsp;/g, (match) => entities[match] || match);
+}
+
 interface DiscoveryCardProps {
   discovery: Discovery;
   interests: Interest[];
@@ -135,12 +149,12 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
           <div className="flex-1 min-w-0">
             {/* Title - Serif */}
             <h3 className="font-serif text-lg text-white mb-2 group-hover:text-[#00d4aa] transition-none">
-              {discovery.title}
+              {decodeHtmlEntities(discovery.title)}
             </h3>
 
             {/* Summary - Terminal */}
             <p className="font-terminal text-xs text-[#888888] mb-3 line-clamp-2">
-              {discovery.summary}
+              {decodeHtmlEntities(discovery.summary)}
             </p>
 
             {/* Metadata row */}
