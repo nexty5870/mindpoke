@@ -292,29 +292,6 @@ export function InterestGraph({
     }
   }, []);
 
-  // Get link positions from resolved d3 nodes
-  const getLinkCoords = useCallback((link: GraphLink) => {
-    const source = link.source as GraphNode;
-    const target = link.target as GraphNode;
-    if (!source?.x || !source?.y || !target?.x || !target?.y) return null;
-    return { x1: source.x, y1: source.y, x2: target.x, y2: target.y };
-  }, []);
-
-  const isLinkHighlighted = useCallback((link: GraphLink) => {
-    const sourceId = (link.source as GraphNode).id;
-    const targetId = (link.target as GraphNode).id;
-    const activeId = hoveredNode || selectedInterest;
-    return activeId && (sourceId === activeId || targetId === activeId);
-  }, [hoveredNode, selectedInterest]);
-
-  const getNodeConnections = useCallback((nodeId: string) => {
-    return links.filter(l => {
-      const sId = (l.source as GraphNode).id || l.source;
-      const tId = (l.target as GraphNode).id || l.target;
-      return sId === nodeId || tId === nodeId;
-    });
-  }, [links]);
-
   return (
     <div 
       ref={containerRef}
@@ -326,83 +303,21 @@ export function InterestGraph({
       {/* Header */}
       <div className="absolute top-4 left-4 z-10 font-terminal text-[10px] text-[#555555]">
         <div>$ GRAPH_RENDER :: FORCE_DIRECTED</div>
-        <div className="text-[#00d4aa]">NODES: {nodes.length} | EDGES: {links.length}</div>
+        <div className="text-[#00d4aa]">NODES: {nodes.length} | PHYSICS: ACTIVE</div>
       </div>
 
-      {/* Connection tooltip */}
-      {hoveredNode && getNodeConnections(hoveredNode).length > 0 && (
-        <div className="absolute top-4 right-4 z-10 bg-[#111113] border border-[#2a2a30] p-3 max-w-xs">
-          <div className="font-terminal text-[10px] text-[#555555] mb-2">$ CONNECTIONS</div>
-          {getNodeConnections(hoveredNode).map(l => {
-            const sId = (l.source as GraphNode).id || l.source;
-            const tId = (l.target as GraphNode).id || l.target;
-            const otherId = sId === hoveredNode ? tId : sId;
-            const otherNode = nodes.find(n => n.id === otherId);
-            return (
-              <div key={l.id} className="font-terminal text-xs text-[#888888] mb-1">
-                <span className="text-[#00d4aa]">→</span> {otherNode?.interest.name}
-                <span className="text-[#555555] ml-2">({l.reason})</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* SVG for links */}
+      {/* SVG for grid background */}
       <svg 
-        className="absolute inset-0" 
+        className="absolute inset-0 pointer-events-none" 
         style={{ zIndex: 1 }}
         width={dimensions.width} 
         height={dimensions.height}
       >
-        <defs>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-            <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
-            </feMerge>
-          </filter>
-        </defs>
-        
         {/* Grid */}
         <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
           <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(42, 42, 48, 0.3)" strokeWidth="1"/>
         </pattern>
         <rect width="100%" height="100%" fill="url(#grid)" />
-        
-        {/* Render links */}
-        {links.map((link) => {
-          const coords = getLinkCoords(link);
-          if (!coords) return null;
-          
-          const highlighted = isLinkHighlighted(link);
-          const opacity = highlighted ? 0.9 : 0.2 + Math.min(0.4, link.strength * 0.08);
-          const width = Math.min(4, 1 + link.strength * 0.4);
-          
-          return (
-            <g key={link.id}>
-              {highlighted && (
-                <line
-                  x1={coords.x1} y1={coords.y1}
-                  x2={coords.x2} y2={coords.y2}
-                  stroke="#00d4aa"
-                  strokeWidth={width + 6}
-                  opacity={0.3}
-                  filter="url(#glow)"
-                />
-              )}
-              <line
-                x1={coords.x1} y1={coords.y1}
-                x2={coords.x2} y2={coords.y2}
-                stroke="#00d4aa"
-                strokeWidth={width}
-                opacity={opacity}
-                strokeLinecap="round"
-              />
-            </g>
-          );
-        })}
       </svg>
 
       {/* Nodes */}
@@ -411,14 +326,7 @@ export function InterestGraph({
           {nodes.map((node) => {
             const isSelected = node.id === selectedInterest;
             const isHovered = node.id === hoveredNode;
-            const connections = getNodeConnections(node.id);
-            const isConnectedToActive = connections.some(l => {
-              const sId = (l.source as GraphNode).id || l.source;
-              const tId = (l.target as GraphNode).id || l.target;
-              const activeId = hoveredNode || selectedInterest;
-              return activeId && activeId !== node.id && (sId === activeId || tId === activeId);
-            });
-            const isActive = isSelected || isHovered || isConnectedToActive;
+            const isActive = isSelected || isHovered;
             const isFixed = node.fx != null;
 
             return (
@@ -501,17 +409,10 @@ export function InterestGraph({
                       : "border-[#2a2a30] text-[#888888]"
                   )}>{node.interest.priority}</div>
 
-                  {/* Connection count */}
-                  {connections.length > 0 && (
-                    <div className="absolute -bottom-2 -left-2 w-5 h-5 flex items-center justify-center font-terminal text-[9px] border border-[#00d4aa] bg-[#0a0a0f] text-[#00d4aa]">
-                      {connections.length}
-                    </div>
-                  )}
-
-                  {/* Pinned indicator */}
+                  {/* Pinned/Locked indicator */}
                   {isFixed && (
-                    <div className="absolute -top-2 -left-2 w-5 h-5 flex items-center justify-center border border-[#ff4444] bg-[#0a0a0f]">
-                      <Icon icon="mdi:pin" className="w-3 h-3 text-[#ff4444]" />
+                    <div className="absolute -top-2 -left-2 w-5 h-5 flex items-center justify-center border border-[#00d4aa] bg-[#0a0a0f]">
+                      <Icon icon="ph:crosshair-simple-bold" className="w-3 h-3 text-[#00d4aa]" />
                     </div>
                   )}
                 </div>
@@ -525,12 +426,6 @@ export function InterestGraph({
       <div className="absolute bottom-4 left-4 z-10 font-terminal text-[10px] text-[#555555]">
         DRAG: PLACE_NODE | DOUBLE-CLICK: RESET | CLICK: SELECT
       </div>
-
-      {links.length === 0 && nodes.length > 1 && (
-        <div className="absolute bottom-4 right-4 z-10 font-terminal text-[10px] text-[#ffb000]">
-          NO_CONNECTIONS — Add interests with overlapping keywords
-        </div>
-      )}
     </div>
   );
 }
