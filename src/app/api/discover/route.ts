@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { searchTweets, calculateRelevance, type Tweet } from "@/lib/sources/bird";
+import { searchReddit, calculateRedditRelevance, type RedditPost } from "@/lib/sources/reddit";
+import { searchHackerNews, calculateHNRelevance, type HNStory } from "@/lib/sources/hackernews";
 import { db } from "@/lib/db";
 import { discoveries, interests as interestsTable } from "@/lib/db/schema";
 import type { Discovery, DiscoverySource } from "@/types";
@@ -75,13 +77,71 @@ function tweetToDbDiscovery(tweet: Tweet, interest: { id: string; keywords: stri
   };
 }
 
+function redditPostToDbDiscovery(post: RedditPost, interest: { id: string; keywords: string[] }) {
+  return {
+    sourceType: "reddit" as const,
+    sourceId: `reddit_${post.id}`,
+    sourceUrl: post.permalink,
+    title: post.title,
+    content: post.selftext || post.title,
+    author: post.author,
+    authorHandle: post.author,
+    metadata: {
+      upvotes: post.score,
+      comments: post.num_comments,
+      subreddit: post.subreddit,
+      domain: post.domain,
+      externalUrl: post.is_self ? null : post.url,
+    },
+    relevanceScore: calculateRedditRelevance(post, interest.keywords),
+    interestId: interest.id,
+    matchedKeywords: interest.keywords.filter(kw => 
+      `${post.title} ${post.selftext}`.toLowerCase().includes(kw.toLowerCase())
+    ),
+    status: "unseen" as const,
+    publishedAt: new Date(post.created_utc * 1000),
+  };
+}
+
+function hnStoryToDbDiscovery(story: HNStory, interest: { id: string; keywords: string[] }) {
+  return {
+    sourceType: "hackernews" as const,
+    sourceId: `hn_${story.id}`,
+    sourceUrl: `https://news.ycombinator.com/item?id=${story.id}`,
+    title: story.title,
+    content: story.text || story.title,
+    author: story.by,
+    authorHandle: story.by,
+    metadata: {
+      upvotes: story.score,
+      comments: story.descendants,
+      externalUrl: story.url,
+    },
+    relevanceScore: calculateHNRelevance(story, interest.keywords),
+    interestId: interest.id,
+    matchedKeywords: interest.keywords.filter(kw => 
+      `${story.title} ${story.text || ""}`.toLowerCase().includes(kw.toLowerCase())
+    ),
+    status: "unseen" as const,
+    publishedAt: new Date(story.time * 1000),
+  };
+}
+
 function dbToFrontendDiscovery(db: any): Discovery {
+  // Map sourceType to frontend source
+  const sourceMap: Record<string, DiscoverySource> = {
+    twitter: "x",
+    reddit: "reddit",
+    hackernews: "hackernews",
+    rss: "rss",
+  };
+  
   return {
     id: db.id,
     title: db.title || "",
     summary: db.content || "",
     url: db.sourceUrl || "",
-    source: (db.sourceType === "twitter" ? "x" : db.sourceType) as DiscoverySource,
+    source: sourceMap[db.sourceType] || "x",
     sourceId: db.sourceId,
     author: db.author,
     authorHandle: db.authorHandle,
@@ -90,7 +150,8 @@ function dbToFrontendDiscovery(db: any): Discovery {
     engagementMetrics: {
       likes: db.metadata?.likes,
       retweets: db.metadata?.retweets,
-      comments: db.metadata?.replies,
+      comments: db.metadata?.replies || db.metadata?.comments,
+      upvotes: db.metadata?.upvotes,
     },
     status: db.status === "unseen" ? "new" : db.status === "seen" ? "read" : db.status,
     publishedAt: db.publishedAt ? new Date(db.publishedAt) : new Date(),
@@ -101,7 +162,7 @@ function dbToFrontendDiscovery(db: any): Discovery {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const minRelevance: number = body.minRelevance || 25; // Lower default - single keyword can score ~30
+    const minRelevance: number = body.minRelevance || 25;
     const maxResultsPerInterest: number = body.maxResultsPerInterest || 10;
     
     // ALWAYS fetch interests from database to get current keywords
@@ -123,14 +184,14 @@ export async function POST(request: Request) {
     const existingSourceIds = new Set(existingDiscoveries.map(d => d.sourceId));
     
     const allNewDiscoveries: any[] = [];
-    const searchStats: Record<string, { query: string; found: number; relevant: number; new: number }> = {};
+    const searchStats: Record<string, { query: string; found: number; relevant: number; new: number; sources: Record<string, number> }> = {};
     
-    // Search for each interest
+    // Search for each interest - all sources in parallel
     for (const interest of allInterests) {
       const keywords = interest.keywords || [];
       if (keywords.length === 0) {
         console.log(`[discover] Skipping ${interest.name} - no keywords`);
-        searchStats[interest.id] = { query: "(no keywords)", found: 0, relevant: 0, new: 0 };
+        searchStats[interest.id] = { query: "(no keywords)", found: 0, relevant: 0, new: 0, sources: {} };
         continue;
       }
       
@@ -139,46 +200,99 @@ export async function POST(request: Request) {
       
       console.log(`[discover] Searching: "${query}" for interest: ${interest.name}`);
       
+      const sourceStats: Record<string, number> = {};
+      
       try {
-        const tweets = await searchTweets(query, 30);
+        // Run all sources in parallel
+        const [tweets, redditPosts, hnStories] = await Promise.all([
+          searchTweets(query, 30).catch(err => {
+            console.error(`[discover] Twitter search failed:`, err);
+            return [];
+          }),
+          searchReddit(keywords, 20).catch(err => {
+            console.error(`[discover] Reddit search failed:`, err);
+            return [];
+          }),
+          searchHackerNews(keywords, 20).catch(err => {
+            console.error(`[discover] HackerNews search failed:`, err);
+            return [];
+          }),
+        ]);
         
-        // Filter out already-saved tweets and non-English content
-        const newTweets = tweets.filter(t => {
-          if (existingSourceIds.has(t.id)) return false;
-          if (!isEnglish(t.text)) {
-            console.log(`[discover] Skipping non-English tweet: ${t.text.slice(0, 50)}...`);
-            return false;
-          }
-          return true;
-        });
-        
-        // Convert to DB format and filter by relevance
-        const dbDiscoveries = newTweets
+        // Process Twitter results
+        const twitterDiscoveries = tweets
+          .filter(t => {
+            if (existingSourceIds.has(t.id)) return false;
+            if (!isEnglish(t.text)) {
+              console.log(`[discover] Skipping non-English tweet: ${t.text.slice(0, 50)}...`);
+              return false;
+            }
+            return true;
+          })
           .map(tweet => tweetToDbDiscovery(tweet, { id: interest.id, keywords }))
-          .filter(d => d.relevanceScore >= minRelevance)
-          .slice(0, maxResultsPerInterest); // Limit per interest
+          .filter(d => d.relevanceScore >= minRelevance);
         
-        // Mark as seen for this session
-        newTweets.forEach(t => existingSourceIds.add(t.id));
+        sourceStats.twitter = twitterDiscoveries.length;
+        tweets.forEach(t => existingSourceIds.add(t.id));
         
-        allNewDiscoveries.push(...dbDiscoveries);
+        // Process Reddit results
+        const redditDiscoveries = redditPosts
+          .filter(p => {
+            const sourceId = `reddit_${p.id}`;
+            if (existingSourceIds.has(sourceId)) return false;
+            if (!isEnglish(`${p.title} ${p.selftext}`)) return false;
+            return true;
+          })
+          .map(post => redditPostToDbDiscovery(post, { id: interest.id, keywords }))
+          .filter(d => d.relevanceScore >= minRelevance);
+        
+        sourceStats.reddit = redditDiscoveries.length;
+        redditPosts.forEach(p => existingSourceIds.add(`reddit_${p.id}`));
+        
+        // Process HackerNews results
+        const hnDiscoveries = hnStories
+          .filter(s => {
+            const sourceId = `hn_${s.id}`;
+            if (existingSourceIds.has(sourceId)) return false;
+            if (!isEnglish(`${s.title} ${s.text || ""}`)) return false;
+            return true;
+          })
+          .map(story => hnStoryToDbDiscovery(story, { id: interest.id, keywords }))
+          .filter(d => d.relevanceScore >= minRelevance);
+        
+        sourceStats.hackernews = hnDiscoveries.length;
+        hnStories.forEach(s => existingSourceIds.add(`hn_${s.id}`));
+        
+        // Combine all and limit per interest
+        const allSourceDiscoveries = [
+          ...twitterDiscoveries,
+          ...redditDiscoveries,
+          ...hnDiscoveries,
+        ].sort((a, b) => b.relevanceScore - a.relevanceScore)
+         .slice(0, maxResultsPerInterest);
+        
+        allNewDiscoveries.push(...allSourceDiscoveries);
+        
+        const totalFound = tweets.length + redditPosts.length + hnStories.length;
+        const totalRelevant = allSourceDiscoveries.length;
         
         searchStats[interest.id] = {
           query,
-          found: tweets.length,
-          relevant: dbDiscoveries.length,
-          new: newTweets.length,
+          found: totalFound,
+          relevant: totalRelevant,
+          new: totalRelevant,
+          sources: sourceStats,
         };
         
-        // Small delay to avoid rate limiting
-        await new Promise(r => setTimeout(r, 500));
+        // Small delay between interests
+        await new Promise(r => setTimeout(r, 300));
       } catch (error) {
         console.error(`[discover] Search failed for ${interest.name}:`, error);
-        searchStats[interest.id] = { query, found: 0, relevant: 0, new: 0 };
+        searchStats[interest.id] = { query, found: 0, relevant: 0, new: 0, sources: {} };
       }
     }
     
-    // Deduplicate by sourceId (in case same tweet matches multiple interests)
+    // Deduplicate by sourceId (in case same item matches multiple interests)
     const uniqueDiscoveries = Array.from(
       new Map(allNewDiscoveries.map(d => [d.sourceId, d])).values()
     );
@@ -210,6 +324,13 @@ export async function POST(request: Request) {
       ...searchStats[i.id],
     }));
     
+    // Count by source
+    const bySource = {
+      twitter: sortedDiscoveries.filter(d => d.sourceType === "twitter").length,
+      reddit: sortedDiscoveries.filter(d => d.sourceType === "reddit").length,
+      hackernews: sortedDiscoveries.filter(d => d.sourceType === "hackernews").length,
+    };
+    
     return NextResponse.json({
       success: true,
       data: {
@@ -220,6 +341,7 @@ export async function POST(request: Request) {
           uniqueResults: uniqueDiscoveries.length,
           persisted: savedDiscoveries.length,
           returned: frontendDiscoveries.length,
+          bySource,
           byInterest: interestStats,
         },
       },
