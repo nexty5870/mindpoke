@@ -9,6 +9,7 @@ import { AddInterestDialog } from "@/components/mindpoke/add-interest-dialog";
 import { EditInterestDialog } from "@/components/mindpoke/edit-interest-dialog";
 import { IngestPanel } from "@/components/mindpoke/ingest-panel";
 import { KeywordSuggestions } from "@/components/mindpoke/keyword-suggestions";
+import { SettingsDialog } from "@/components/mindpoke/settings-dialog";
 import { useMindpokeData } from "@/hooks/use-mindpoke-data";
 import type { Interest } from "@/types";
 
@@ -29,6 +30,7 @@ export default function AppPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingInterestId, setEditingInterestId] = useState<string | null>(null);
   const [isIngestPanelOpen, setIsIngestPanelOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
   const [suggestionsInterestId, setSuggestionsInterestId] = useState<string | null>(null);
   const [view, setView] = useState<"graph" | "feed">("graph");
@@ -140,6 +142,7 @@ export default function AppPage() {
         isDiscovering={isDiscovering}
         onSuggestKeywords={handleSuggestKeywords}
         onEditInterest={handleEditInterest}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
       
       <main className="flex-1 flex flex-col overflow-hidden">
@@ -200,6 +203,10 @@ export default function AppPage() {
         />
       )}
 
+      <SettingsDialog
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+      />
     </div>
   );
 }

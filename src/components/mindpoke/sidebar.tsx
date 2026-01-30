@@ -16,6 +16,7 @@ interface SidebarProps {
   isDiscovering: boolean;
   onSuggestKeywords?: (interestId: string) => void;
   onEditInterest?: (interestId: string) => void;
+  onOpenSettings?: () => void;
 }
 
 export function Sidebar({
@@ -28,6 +29,7 @@ export function Sidebar({
   isDiscovering,
   onSuggestKeywords,
   onEditInterest,
+  onOpenSettings,
 }: SidebarProps) {
   const getHeatLevel = (interest: Interest) => {
     // Use heat directly if available (0-100 scale), convert to 0-5
@@ -233,6 +235,7 @@ export function Sidebar({
       <div className="p-3 border-t border-[#2a2a30]">
         <Button
           variant="ghost"
+          onClick={onOpenSettings}
           className="w-full justify-start text-[#888888] hover:text-[#e6e6e6] hover:bg-transparent font-terminal text-xs"
         >
           <Settings className="w-4 h-4 mr-2" />
