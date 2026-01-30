@@ -48,7 +48,7 @@ function formatPokeMessage(discoveries: PokeableDiscovery[]): string {
     return "";
   }
 
-  const lines: string[] = ["🧠 Mindpoke found something!", ""];
+  const lines: string[] = ["[MINDPOKE] New discoveries:", ""];
   
   // Format each discovery
   discoveries.forEach((d, i) => {
