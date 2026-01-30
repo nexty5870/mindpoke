@@ -72,19 +72,31 @@ export function useMindpokeData() {
   useEffect(() => {
     async function load() {
       try {
-        const [interestsRes, discoveriesRes] = await Promise.all([
+        const [interestsRes, discoveriesRes, savedRes] = await Promise.all([
           fetch("/api/interests"),
           fetch("/api/discoveries?limit=100"),
+          fetch("/api/discoveries?status=saved&limit=50"), // Always fetch saved
         ]);
 
         const interestsData = await interestsRes.json();
         const discoveriesData = await discoveriesRes.json();
+        const savedData = await savedRes.json();
 
         if (interestsData.success) {
           setInterests(interestsData.data.map(mapInterest));
         }
         if (discoveriesData.success) {
-          setDiscoveries(discoveriesData.data.map(mapDiscovery));
+          // Merge recent + saved, dedupe by id
+          const recent = discoveriesData.data || [];
+          const saved = savedData.success ? (savedData.data || []) : [];
+          const merged = [...recent];
+          const seenIds = new Set(recent.map((d: any) => d.id));
+          for (const s of saved) {
+            if (!seenIds.has(s.id)) {
+              merged.push(s);
+            }
+          }
+          setDiscoveries(merged.map(mapDiscovery));
         }
       } catch (err) {
         setError("Failed to load data");
