@@ -15,6 +15,8 @@ function mapInterest(db: Record<string, unknown>): Interest {
     updatedAt: new Date(db.updatedAt as string),
     engagementCount: 0, // TODO: calculate from discoveries
     dismissCount: 0,
+    positionX: db.positionX as number | null | undefined,
+    positionY: db.positionY as number | null | undefined,
   };
 }
 

@@ -12,6 +12,9 @@ export interface Interest {
   lastEngagedAt?: Date;
   engagementCount: number;
   dismissCount: number;
+  // Graph position (saved by user)
+  positionX?: number | null;
+  positionY?: number | null;
 }
 
 export interface Discovery {
