@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/mindpoke/sidebar";
 import { Header } from "@/components/mindpoke/header";
 import { AddInterestDialog } from "@/components/mindpoke/add-interest-dialog";
 import { IngestPanel } from "@/components/mindpoke/ingest-panel";
+import { KeywordSuggestions } from "@/components/mindpoke/keyword-suggestions";
 import { useMindpokeData } from "@/hooks/use-mindpoke-data";
 import type { Interest } from "@/types";
 
@@ -17,6 +18,7 @@ export default function AppPage() {
     isLoading,
     addInterest,
     addDiscoveries,
+    updateDiscoveryStatus,
   } = useMindpokeData();
 
   const [selectedInterest, setSelectedInterest] = useState<string | null>(null);
@@ -106,6 +108,7 @@ export default function AppPage() {
             <DiscoveryFeed
               discoveries={filteredDiscoveries}
               interests={interests}
+              onUpdateStatus={updateDiscoveryStatus}
             />
           )}
         </div>

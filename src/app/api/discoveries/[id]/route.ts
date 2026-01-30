@@ -48,6 +48,18 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    // First, get the current discovery to check for status change and get interestId
+    const existing = await db.query.discoveries.findFirst({
+      where: eq(discoveries.id, id),
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: "Discovery not found" },
+        { status: 404 }
+      );
+    }
+
     // Handle status changes with timestamps
     const updates: Record<string, unknown> = { ...body };
     if (body.status === "seen" && !body.seenAt) {
@@ -60,16 +72,34 @@ export async function PATCH(
       .where(eq(discoveries.id, id))
       .returning();
 
-    if (!updated) {
-      return NextResponse.json(
-        { success: false, error: "Discovery not found" },
-        { status: 404 }
-      );
+    // Update interest heat if status changed to saved or dismissed
+    let updatedInterest = null;
+    if (body.status && existing.interestId && body.status !== existing.status) {
+      const heatDelta = body.status === "saved" 
+        ? HEAT_SAVE_DELTA 
+        : body.status === "dismissed" 
+        ? HEAT_DISMISS_DELTA 
+        : 0;
+
+      if (heatDelta !== 0) {
+        // Update heat with floor(0) and cap(100)
+        const [interest] = await db
+          .update(interests)
+          .set({
+            heat: sql`GREATEST(0, LEAST(100, ${interests.heat} + ${heatDelta}))`,
+            updatedAt: new Date(),
+          })
+          .where(eq(interests.id, existing.interestId))
+          .returning();
+        
+        updatedInterest = interest;
+      }
     }
 
     return NextResponse.json({
       success: true,
       data: updated,
+      interest: updatedInterest,
     });
   } catch (error) {
     console.error("Failed to update discovery:", error);

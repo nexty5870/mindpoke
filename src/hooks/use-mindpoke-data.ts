@@ -156,7 +156,7 @@ export function useMindpokeData() {
     return false;
   }, []);
 
-  // Update discovery status
+  // Update discovery status (and interest heat via feedback loop)
   const updateDiscoveryStatus = useCallback(async (
     id: string, 
     status: Discovery["status"]
@@ -171,7 +171,16 @@ export function useMindpokeData() {
 
       const data = await response.json();
       if (data.success) {
+        // Update the discovery in state
         setDiscoveries(prev => prev.map(d => d.id === id ? mapDiscovery(data.data) : d));
+        
+        // If interest heat was updated, refresh that interest in state
+        if (data.interest) {
+          setInterests(prev => prev.map(i => 
+            i.id === data.interest.id ? mapInterest(data.interest) : i
+          ));
+        }
+        
         return data.data;
       }
     } catch (err) {

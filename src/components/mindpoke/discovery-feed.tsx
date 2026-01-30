@@ -21,6 +21,7 @@ import type { Discovery, Interest, DiscoverySource } from "@/types";
 interface DiscoveryFeedProps {
   discoveries: Discovery[];
   interests: Interest[];
+  onUpdateStatus?: (id: string, status: Discovery["status"]) => Promise<unknown>;
 }
 
 const sourceLabels: Record<DiscoverySource, string> = {
@@ -43,9 +44,22 @@ interface DiscoveryCardProps {
   discovery: Discovery;
   interests: Interest[];
   index: number;
+  onUpdateStatus?: (id: string, status: Discovery["status"]) => Promise<unknown>;
 }
 
-function DiscoveryCard({ discovery, interests, index }: DiscoveryCardProps) {
+function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: DiscoveryCardProps) {
+  const handleSave = async () => {
+    if (onUpdateStatus) {
+      await onUpdateStatus(discovery.id, discovery.status === "saved" ? "read" : "saved");
+    }
+  };
+
+  const handleDismiss = async () => {
+    if (onUpdateStatus) {
+      await onUpdateStatus(discovery.id, "dismissed");
+    }
+  };
+
   const matchedInterestNames = discovery.matchedInterests
     .map((id) => interests.find((i) => i.id === id)?.name?.toUpperCase().replace(/\s+/g, '_'))
     .filter(Boolean);
@@ -167,6 +181,8 @@ function DiscoveryCard({ discovery, interests, index }: DiscoveryCardProps) {
                   variant="ghost" 
                   size="icon" 
                   className="h-8 w-8 border border-transparent hover:border-[#00d4aa] hover:bg-transparent"
+                  onClick={handleSave}
+                  title={discovery.status === "saved" ? "Unsave" : "Save"}
                 >
                   {discovery.status === "saved" ? (
                     <BookmarkCheck className="w-4 h-4 text-[#00d4aa]" />
@@ -178,6 +194,7 @@ function DiscoveryCard({ discovery, interests, index }: DiscoveryCardProps) {
                   variant="ghost" 
                   size="icon" 
                   className="h-8 w-8 border border-transparent hover:border-[#00d4aa] hover:bg-transparent"
+                  title="Mark as read"
                 >
                   <Eye className="w-4 h-4 text-[#888888]" />
                 </Button>
@@ -185,6 +202,9 @@ function DiscoveryCard({ discovery, interests, index }: DiscoveryCardProps) {
                   variant="ghost" 
                   size="icon" 
                   className="h-8 w-8 border border-transparent hover:border-[#ff4444] hover:bg-transparent"
+                  onClick={handleDismiss}
+                  title="Dismiss"
+                  disabled={discovery.status === "dismissed"}
                 >
                   <X className="w-4 h-4 text-[#888888]" />
                 </Button>
@@ -207,7 +227,7 @@ function DiscoveryCard({ discovery, interests, index }: DiscoveryCardProps) {
   );
 }
 
-export function DiscoveryFeed({ discoveries, interests }: DiscoveryFeedProps) {
+export function DiscoveryFeed({ discoveries, interests, onUpdateStatus }: DiscoveryFeedProps) {
   const sortedDiscoveries = [...discoveries].sort((a, b) => {
     if (a.status === "new" && b.status !== "new") return -1;
     if (a.status !== "new" && b.status === "new") return 1;
@@ -240,6 +260,7 @@ export function DiscoveryFeed({ discoveries, interests }: DiscoveryFeedProps) {
               discovery={discovery}
               interests={interests}
               index={index}
+              onUpdateStatus={onUpdateStatus}
             />
           ))}
         </div>

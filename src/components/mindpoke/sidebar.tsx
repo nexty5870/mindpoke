@@ -1,6 +1,6 @@
 "use client";
 
-import { Bookmark, Plus, Settings, Zap, Search, RefreshCw } from "lucide-react";
+import { Bookmark, Plus, Settings, Zap, Search, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ interface SidebarProps {
   onIngestBookmarks: () => void;
   onDiscover: () => void;
   isDiscovering: boolean;
+  onSuggestKeywords?: (interestId: string) => void;
 }
 
 export function Sidebar({
@@ -24,6 +25,7 @@ export function Sidebar({
   onIngestBookmarks,
   onDiscover,
   isDiscovering,
+  onSuggestKeywords,
 }: SidebarProps) {
   const getHeatLevel = (interest: Interest) => {
     const ratio = interest.engagementCount / (interest.engagementCount + interest.dismissCount + 1);
@@ -184,6 +186,20 @@ export function Sidebar({
                 )}>
                   {interest.priority}
                 </div>
+
+                {/* Suggest keywords button */}
+                {onSuggestKeywords && selectedInterest === interest.id && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSuggestKeywords(interest.id);
+                    }}
+                    className="w-6 h-6 flex items-center justify-center border border-[#2a2a30] hover:border-[#00d4aa] text-[#888888] hover:text-[#00d4aa] transition-colors"
+                    title="Suggest keywords from saved discoveries"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                  </button>
+                )}
               </button>
             );
           })}
