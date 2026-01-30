@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { discoveries } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { discoveries, interests } from "@/lib/db/schema";
+import { eq, sql } from "drizzle-orm";
+
+// Heat adjustment values for feedback loop
+const HEAT_SAVE_DELTA = 5;  // saved → +5
+const HEAT_DISMISS_DELTA = -2;  // dismissed → -2
 
 // GET /api/discoveries/[id]
 export async function GET(
