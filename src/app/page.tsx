@@ -1,130 +1,222 @@
-"use client";
+import Link from "next/link";
+import { Github, Zap, Brain, Bell, ArrowRight } from "lucide-react";
 
-import { useState, useCallback } from "react";
-import { InterestGraph } from "@/components/mindpoke/interest-graph";
-import { DiscoveryFeed } from "@/components/mindpoke/discovery-feed";
-import { Sidebar } from "@/components/mindpoke/sidebar";
-import { Header } from "@/components/mindpoke/header";
-import { AddInterestDialog } from "@/components/mindpoke/add-interest-dialog";
-import { IngestPanel } from "@/components/mindpoke/ingest-panel";
-import { useMindpokeData } from "@/hooks/use-mindpoke-data";
-import type { Interest, Discovery } from "@/types";
-
-export default function Home() {
-  const {
-    interests,
-    discoveries,
-    isLoading,
-    addInterest,
-    addDiscoveries,
-  } = useMindpokeData();
-
-  const [selectedInterest, setSelectedInterest] = useState<string | null>(null);
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isIngestPanelOpen, setIsIngestPanelOpen] = useState(false);
-  const [view, setView] = useState<"graph" | "feed">("graph");
-  const [isDiscovering, setIsDiscovering] = useState(false);
-
-  const handleAddInterest = useCallback(async (
-    interest: Omit<Interest, "id" | "createdAt" | "updatedAt" | "engagementCount" | "dismissCount">
-  ) => {
-    await addInterest(interest);
-    setIsAddDialogOpen(false);
-  }, [addInterest]);
-
-  const handleDiscover = useCallback(async () => {
-    if (interests.length === 0) return;
-    
-    setIsDiscovering(true);
-    try {
-      const response = await fetch("/api/discover", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          interests,
-          minRelevance: 40,
-          maxResults: 30,
-        }),
-      });
-      
-      const data = await response.json();
-      
-      if (data.success && data.data.discoveries.length > 0) {
-        addDiscoveries(data.data.discoveries);
-      }
-    } catch (error) {
-      console.error("Discovery failed:", error);
-    } finally {
-      setIsDiscovering(false);
-    }
-  }, [interests, addDiscoveries]);
-
-  const filteredDiscoveries = selectedInterest
-    ? discoveries.filter((d) => d.matchedInterests.includes(selectedInterest))
-    : discoveries;
-
-  if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-[#0a0a0f]">
-        <div className="text-[#00d4aa] font-mono text-sm">
-          ┌─ SYSTEM_BOOT ─┐
-          <br />
-          │ LOADING...   │
-          <br />
-          └──────────────┘
-        </div>
-      </div>
-    );
-  }
-
+export default function LandingPage() {
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar
-        interests={interests}
-        selectedInterest={selectedInterest}
-        onSelectInterest={setSelectedInterest}
-        onAddInterest={() => setIsAddDialogOpen(true)}
-        onIngestBookmarks={() => setIsIngestPanelOpen(true)}
-        onDiscover={handleDiscover}
-        isDiscovering={isDiscovering}
-      />
-      
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <Header
-          view={view}
-          onViewChange={setView}
-          discoveryCount={discoveries.filter((d) => d.status === "new").length}
-        />
-        
-        <div className="flex-1 overflow-hidden">
-          {view === "graph" ? (
-            <InterestGraph
-              interests={interests}
-              discoveries={discoveries}
-              selectedInterest={selectedInterest}
-              onSelectInterest={setSelectedInterest}
-            />
-          ) : (
-            <DiscoveryFeed
-              discoveries={filteredDiscoveries}
-              interests={interests}
-            />
-          )}
+    <div className="min-h-screen bg-[#0a0a0f] text-[#e6e6e6]">
+      {/* Header */}
+      <header className="border-b border-[#2a2a30]">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 border border-[#00d4aa] flex items-center justify-center">
+              <Zap className="w-4 h-4 text-[#00d4aa]" />
+            </div>
+            <span className="font-terminal text-sm text-[#888888]">MINDPOKE.COM</span>
+          </div>
+          
+          <nav className="flex items-center gap-6">
+            <a
+              href="https://github.com/nexty5870/mindpoke"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-[#888888] hover:text-[#00d4aa] transition-colors font-terminal text-sm"
+            >
+              <Github className="w-4 h-4" />
+              <span className="hidden sm:inline">GITHUB</span>
+            </a>
+            <Link
+              href="/app"
+              className="ascii-btn px-4 py-2 text-sm text-[#00d4aa] hover:bg-[#00d4aa] hover:text-[#0a0a0f]"
+            >
+              LAUNCH_APP
+            </Link>
+          </nav>
         </div>
-      </main>
+      </header>
 
-      <AddInterestDialog
-        open={isAddDialogOpen}
-        onOpenChange={setIsAddDialogOpen}
-        onAdd={handleAddInterest}
-      />
+      {/* Hero */}
+      <section className="max-w-6xl mx-auto px-6 py-24 md:py-32">
+        <div className="max-w-3xl">
+          {/* Terminal label */}
+          <div className="font-terminal text-xs text-[#555555] mb-6">
+            $ SYSTEM_INIT :: COGNITIVE_FEED_AGENT
+          </div>
+          
+          {/* Main headline */}
+          <h1 className="font-serif text-5xl md:text-7xl font-bold text-white mb-6 leading-[1.1]">
+            Your interests,
+            <br />
+            <span className="text-[#00d4aa]">proactively served.</span>
+          </h1>
+          
+          {/* Subheadline */}
+          <p className="font-terminal text-lg text-[#888888] mb-10 max-w-xl leading-relaxed">
+            Mindpoke monitors what matters to you across X, Reddit, Hacker News, 
+            and RSS feeds - then pokes you when something relevant surfaces.
+          </p>
+          
+          {/* CTA buttons */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            <Link
+              href="/app"
+              className="group inline-flex items-center justify-center gap-3 bg-[#00d4aa] text-[#0a0a0f] px-8 py-4 font-terminal text-sm font-medium hover:bg-[#00b894] transition-colors"
+            >
+              <span>START_DISCOVERING</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </Link>
+            <a
+              href="https://github.com/nexty5870/mindpoke"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-3 border border-[#2a2a30] text-[#e6e6e6] px-8 py-4 font-terminal text-sm hover:border-[#00d4aa] hover:text-[#00d4aa] transition-colors"
+            >
+              <Github className="w-4 h-4" />
+              <span>VIEW_SOURCE</span>
+            </a>
+          </div>
+        </div>
+      </section>
 
-      <IngestPanel
-        isOpen={isIngestPanelOpen}
-        onClose={() => setIsIngestPanelOpen(false)}
-        onAddInterest={handleAddInterest}
-        existingInterests={interests}
-      />
+      {/* Features */}
+      <section className="border-t border-[#2a2a30]">
+        <div className="max-w-6xl mx-auto px-6 py-24">
+          <div className="font-terminal text-xs text-[#555555] mb-8">
+            $ MODULE_LIST :: CORE_FEATURES
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* Feature 1 */}
+            <div className="border border-[#2a2a30] p-6 relative">
+              <span className="absolute -top-[1px] -left-[1px] font-terminal text-[10px] text-[#2a2a30]">┌</span>
+              <span className="absolute -top-[1px] -right-[1px] font-terminal text-[10px] text-[#2a2a30]">┐</span>
+              <span className="absolute -bottom-[1px] -left-[1px] font-terminal text-[10px] text-[#2a2a30]">└</span>
+              <span className="absolute -bottom-[1px] -right-[1px] font-terminal text-[10px] text-[#2a2a30]">┘</span>
+              
+              <div className="w-12 h-12 border border-[#00d4aa] flex items-center justify-center mb-4">
+                <Brain className="w-6 h-6 text-[#00d4aa]" />
+              </div>
+              <h3 className="font-serif text-xl text-white mb-3">Interest Graph</h3>
+              <p className="font-terminal text-sm text-[#888888] leading-relaxed">
+                Map your curiosities as nodes. Watch connections form as topics 
+                overlap and evolve over time.
+              </p>
+            </div>
+
+            {/* Feature 2 */}
+            <div className="border border-[#2a2a30] p-6 relative">
+              <span className="absolute -top-[1px] -left-[1px] font-terminal text-[10px] text-[#2a2a30]">┌</span>
+              <span className="absolute -top-[1px] -right-[1px] font-terminal text-[10px] text-[#2a2a30]">┐</span>
+              <span className="absolute -bottom-[1px] -left-[1px] font-terminal text-[10px] text-[#2a2a30]">└</span>
+              <span className="absolute -bottom-[1px] -right-[1px] font-terminal text-[10px] text-[#2a2a30]">┘</span>
+              
+              <div className="w-12 h-12 border border-[#ffb000] flex items-center justify-center mb-4">
+                <Zap className="w-6 h-6 text-[#ffb000]" />
+              </div>
+              <h3 className="font-serif text-xl text-white mb-3">Multi-Source Discovery</h3>
+              <p className="font-terminal text-sm text-[#888888] leading-relaxed">
+                One interface for X, Reddit, Hacker News, arXiv, and RSS. 
+                No more tab-hopping through feeds.
+              </p>
+            </div>
+
+            {/* Feature 3 */}
+            <div className="border border-[#2a2a30] p-6 relative">
+              <span className="absolute -top-[1px] -left-[1px] font-terminal text-[10px] text-[#2a2a30]">┌</span>
+              <span className="absolute -top-[1px] -right-[1px] font-terminal text-[10px] text-[#2a2a30]">┐</span>
+              <span className="absolute -bottom-[1px] -left-[1px] font-terminal text-[10px] text-[#2a2a30]">└</span>
+              <span className="absolute -bottom-[1px] -right-[1px] font-terminal text-[10px] text-[#2a2a30]">┘</span>
+              
+              <div className="w-12 h-12 border border-[#00d4aa] flex items-center justify-center mb-4">
+                <Bell className="w-6 h-6 text-[#00d4aa]" />
+              </div>
+              <h3 className="font-serif text-xl text-white mb-3">Proactive Pokes</h3>
+              <p className="font-terminal text-sm text-[#888888] leading-relaxed">
+                Get notified via WhatsApp, Telegram, or Discord when high-relevance 
+                content matches your interests.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section className="border-t border-[#2a2a30]">
+        <div className="max-w-6xl mx-auto px-6 py-24">
+          <div className="font-terminal text-xs text-[#555555] mb-8">
+            $ PROCESS_FLOW :: HOW_IT_WORKS
+          </div>
+          
+          <div className="grid md:grid-cols-4 gap-6">
+            {[
+              { step: "01", title: "Define", desc: "Add topics you care about as interest nodes" },
+              { step: "02", title: "Discover", desc: "Mindpoke scans sources matching your keywords" },
+              { step: "03", title: "Score", desc: "Content is ranked by relevance and engagement" },
+              { step: "04", title: "Poke", desc: "Get notified when something truly matters" },
+            ].map((item) => (
+              <div key={item.step} className="relative">
+                <div className="font-terminal text-3xl text-[#2a2a30] mb-4">{item.step}</div>
+                <h4 className="font-serif text-lg text-white mb-2">{item.title}</h4>
+                <p className="font-terminal text-sm text-[#888888]">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="border-t border-[#2a2a30]">
+        <div className="max-w-6xl mx-auto px-6 py-24 text-center">
+          <h2 className="font-serif text-3xl md:text-4xl text-white mb-6">
+            Stop scrolling. Start discovering.
+          </h2>
+          <p className="font-terminal text-[#888888] mb-10 max-w-lg mx-auto">
+            Mindpoke is open source and self-hostable. 
+            Your interests, your data, your agent.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link
+              href="/app"
+              className="inline-flex items-center justify-center gap-3 bg-[#00d4aa] text-[#0a0a0f] px-8 py-4 font-terminal text-sm font-medium hover:bg-[#00b894] transition-colors"
+            >
+              <span>LAUNCH_APP</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+            <a
+              href="https://github.com/nexty5870/mindpoke"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-3 border border-[#2a2a30] text-[#e6e6e6] px-8 py-4 font-terminal text-sm hover:border-[#00d4aa] hover:text-[#00d4aa] transition-colors"
+            >
+              <Github className="w-4 h-4" />
+              <span>STAR_ON_GITHUB</span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-[#2a2a30]">
+        <div className="max-w-6xl mx-auto px-6 py-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="font-terminal text-xs text-[#555555]">
+              ┌─ MINDPOKE v0.1.0 ─┐
+            </div>
+            <div className="flex items-center gap-6">
+              <a
+                href="https://github.com/nexty5870/mindpoke"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-terminal text-xs text-[#888888] hover:text-[#00d4aa] transition-colors"
+              >
+                SOURCE_CODE
+              </a>
+              <span className="font-terminal text-xs text-[#555555]">
+                MIT LICENSE
+              </span>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -212,6 +212,10 @@
 @layer base {
   * {
     border-color: #2a2a30;
+  }
+  
+  /* Remove rounded corners except for React Flow internals */
+  *:not(.react-flow *):not([class*="react-flow"]) {
     border-radius: 0 !important;
   }
   
@@ -226,8 +230,10 @@
     color: #ffffff;
   }
 
-  /* Remove all rounded corners */
-  button, input, select, textarea, [class*="rounded"] {
+  /* Remove all rounded corners except React Flow */
+  button:not(.react-flow button), 
+  input, select, textarea, 
+  [class*="rounded"]:not(.react-flow *) {
     border-radius: 0 !important;
   }
 

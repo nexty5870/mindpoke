@@ -3,8 +3,8 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
-  title: "MINDPOKE // DISCOVERY_SYSTEM",
-  description: "PROACTIVE_LEARNING_AGENT :: Cognitive feed optimization",
+  title: "Mindpoke - Your interests, proactively served",
+  description: "A proactive learning agent that monitors what matters to you across X, Reddit, Hacker News, and RSS feeds - then pokes you when something relevant surfaces.",
 };
 
 export default function RootLayout({
