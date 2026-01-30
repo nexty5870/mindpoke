@@ -11,7 +11,17 @@ export async function GET(request: Request) {
     const interestId = searchParams.get("interestId");
     const limit = parseInt(searchParams.get("limit") || "50");
 
-    let query = db.query.discoveries.findMany({
+    // Build where conditions for DB-level filtering
+    const conditions: any[] = [];
+    if (status) {
+      conditions.push(eq(discoveries.status, status));
+    }
+    if (interestId) {
+      conditions.push(eq(discoveries.interestId, interestId));
+    }
+
+    const results = await db.query.discoveries.findMany({
+      where: conditions.length > 0 ? and(...conditions) : undefined,
       orderBy: [desc(discoveries.discoveredAt)],
       limit,
       with: {
@@ -19,20 +29,9 @@ export async function GET(request: Request) {
       },
     });
 
-    const allDiscoveries = await query;
-    
-    // Filter in memory for now (Drizzle query builder limitations)
-    let filtered = allDiscoveries;
-    if (status) {
-      filtered = filtered.filter(d => d.status === status);
-    }
-    if (interestId) {
-      filtered = filtered.filter(d => d.interestId === interestId);
-    }
-
     return NextResponse.json({
       success: true,
-      data: filtered,
+      data: results,
     });
   } catch (error) {
     console.error("Failed to fetch discoveries:", error);
