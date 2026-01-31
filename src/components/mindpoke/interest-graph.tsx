@@ -274,6 +274,22 @@ export function InterestGraph({
     }
   }, []);
 
+  // Reset all nodes to auto-layout
+  const handleResetLayout = useCallback(() => {
+    if (!simulationRef.current) return;
+    
+    // Clear all fixed positions
+    simulationRef.current.nodes().forEach(node => {
+      node.fx = null;
+      node.fy = null;
+      // Save cleared position to API
+      saveNodePosition(node.id, null, null);
+    });
+    
+    // Restart simulation with high energy
+    simulationRef.current.alpha(1).restart();
+  }, []);
+
   // Get node position by ID for link rendering
   const getNodePos = (nodeOrId: GraphNode | string) => {
     if (typeof nodeOrId === 'string') {
@@ -297,6 +313,18 @@ export function InterestGraph({
         <div className="text-[#00d4aa]">
           NODES: {nodes.length} | EDGES: {links.length} | ACTIVITY: {discoveries.filter(d => d.status === 'new').length}
         </div>
+      </div>
+
+      {/* Controls */}
+      <div className="absolute top-4 right-4 z-10 flex gap-2">
+        <button
+          onClick={handleResetLayout}
+          className="px-3 py-1.5 border border-[#2a2a30] bg-[#111113] hover:border-[#00d4aa] hover:bg-[#00d4aa]/10 font-terminal text-[10px] text-[#888888] hover:text-[#00d4aa] transition-colors flex items-center gap-2"
+          title="Auto-organize all nodes"
+        >
+          <Icon icon="carbon:reset" className="w-3 h-3" />
+          RESET_LAYOUT
+        </button>
       </div>
 
       {/* SVG Layer - Grid + Connections */}
