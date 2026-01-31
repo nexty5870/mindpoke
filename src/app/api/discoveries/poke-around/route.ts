@@ -16,6 +16,7 @@ interface ExternalResult {
   author?: string;
   authorHandle?: string;
   score?: number;
+  createdAt?: string; // ISO date string
 }
 
 /**
@@ -80,6 +81,7 @@ async function searchTwitter(query: string, limit: number = 10): Promise<Externa
       author: t.author?.name,
       authorHandle: t.author?.username,
       score: (t.public_metrics?.like_count || 0) + (t.public_metrics?.retweet_count || 0) * 2,
+      createdAt: t.created_at || t.createdAt,
     }));
   } catch (e) {
     console.error("[poke-around] Twitter search failed:", e);
@@ -109,6 +111,7 @@ async function searchReddit(query: string, limit: number = 10): Promise<External
       author: post.data.author,
       authorHandle: post.data.author,
       score: post.data.score || 0,
+      createdAt: post.data.created_utc ? new Date(post.data.created_utc * 1000).toISOString() : undefined,
     }));
   } catch (e) {
     console.error("[poke-around] Reddit search failed:", e);
@@ -121,23 +124,27 @@ async function searchReddit(query: string, limit: number = 10): Promise<External
  */
 async function searchHackerNews(query: string, limit: number = 10): Promise<ExternalResult[]> {
   try {
+    // Use tags=story to filter out comments (which don't have titles)
     const res = await fetch(
-      `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query)}&hitsPerPage=${limit}`
+      `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query)}&tags=story&hitsPerPage=${limit}`
     );
     
     if (!res.ok) return [];
     
     const data = await res.json();
-    return (data.hits || []).map((hit: any) => ({
-      source: "hackernews" as const,
-      id: hit.objectID,
-      title: hit.title,
-      content: hit.title + (hit.story_text ? ` ${hit.story_text}` : ""),
-      url: hit.url || `https://news.ycombinator.com/item?id=${hit.objectID}`,
-      author: hit.author,
-      authorHandle: hit.author,
-      score: hit.points || 0,
-    }));
+    return (data.hits || [])
+      .filter((hit: any) => hit.title) // Extra safety: ensure title exists
+      .map((hit: any) => ({
+        source: "hackernews" as const,
+        id: hit.objectID,
+        title: hit.title,
+        content: hit.title + (hit.story_text ? ` ${hit.story_text}` : ""),
+        url: hit.url || `https://news.ycombinator.com/item?id=${hit.objectID}`,
+        author: hit.author,
+        authorHandle: hit.author,
+        score: hit.points || 0,
+        createdAt: hit.created_at || (hit.created_at_i ? new Date(hit.created_at_i * 1000).toISOString() : undefined),
+      }));
   } catch (e) {
     console.error("[poke-around] HN search failed:", e);
     return [];

@@ -33,6 +33,41 @@ interface PokeAroundResult {
   author?: string;
   authorHandle?: string;
   score?: number;
+  createdAt?: string;
+}
+
+// Format date for poke around results - "30 Jan" or "30 Jan 2024" if not current year
+function formatPokeDate(dateStr: string | undefined): string {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const sameYear = date.getFullYear() === now.getFullYear();
+  
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+}
+
+// localStorage key for dismissed poke around items
+const POKE_DISMISSED_KEY = "mindpoke:poke-around:dismissed";
+
+function getDismissedPokeIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const stored = localStorage.getItem(POKE_DISMISSED_KEY);
+    return new Set(stored ? JSON.parse(stored) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function dismissPokeId(source: string, id: string): void {
+  const key = `${source}:${id}`;
+  const dismissed = getDismissedPokeIds();
+  dismissed.add(key);
+  localStorage.setItem(POKE_DISMISSED_KEY, JSON.stringify([...dismissed]));
 }
 
 // Format timestamp - "30 Jan, 22:21"
@@ -173,6 +208,9 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
   const [pokeAroundResults, setPokeAroundResults] = useState<PokeAroundResult[]>([]);
   const [isLoadingPokeAround, setIsLoadingPokeAround] = useState(false);
   const [pokeAroundTerms, setPokeAroundTerms] = useState<string[]>([]);
+  const [dismissedPokeIds, setDismissedPokeIds] = useState<Set<string>>(() => getDismissedPokeIds());
+  const [savingPokeIds, setSavingPokeIds] = useState<Set<string>>(new Set());
+  const [savedPokeIds, setSavedPokeIds] = useState<Set<string>>(new Set());
 
   const handleSave = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -239,6 +277,54 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
       console.error("Failed to poke around:", err);
     } finally {
       setIsLoadingPokeAround(false);
+    }
+  };
+
+  const handleDismissPoke = (result: PokeAroundResult) => {
+    const key = `${result.source}:${result.id}`;
+    dismissPokeId(result.source, result.id);
+    setDismissedPokeIds(prev => new Set([...prev, key]));
+  };
+
+  const handleSavePoke = async (result: PokeAroundResult) => {
+    const key = `${result.source}:${result.id}`;
+    setSavingPokeIds(prev => new Set([...prev, key]));
+    
+    try {
+      const sourceTypeMap: Record<string, string> = {
+        twitter: "x",
+        reddit: "reddit",
+        hackernews: "hackernews",
+      };
+      
+      const res = await fetch("/api/discoveries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceType: sourceTypeMap[result.source] || result.source,
+          sourceId: result.id,
+          sourceUrl: result.url,
+          title: result.title || result.content.slice(0, 100),
+          content: result.content,
+          author: result.author,
+          authorHandle: result.authorHandle,
+          relevanceScore: 50, // Default score for saved external items
+          status: "saved",
+          metadata: { score: result.score, savedFrom: "poke-around" },
+        }),
+      });
+      
+      if (res.ok) {
+        setSavedPokeIds(prev => new Set([...prev, key]));
+      }
+    } catch (err) {
+      console.error("Failed to save poke result:", err);
+    } finally {
+      setSavingPokeIds(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     }
   };
 
@@ -721,57 +807,117 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
                       SEARCHING_WEB...
                     </span>
                   </div>
-                ) : pokeAroundResults.length === 0 ? (
+                ) : pokeAroundResults.filter(r => !dismissedPokeIds.has(`${r.source}:${r.id}`)).length === 0 ? (
                   <div className="py-2">
                     <span className="font-terminal text-xs text-[#555555]">
-                      NO_RESULTS_FOUND
+                      {pokeAroundResults.length > 0 ? "ALL_ITEMS_DISMISSED" : "NO_RESULTS_FOUND"}
                     </span>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {pokeAroundResults.map((result) => (
-                      <a
-                        key={`${result.source}-${result.id}`}
-                        href={result.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block p-3 bg-[#111113] border border-[#2a2a30] hover:border-[#ffb000] transition-none"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          {/* Source badge */}
-                          <span className={cn(
-                            "font-terminal text-[9px] px-1.5 py-0.5 border flex items-center gap-1",
-                            result.source === "twitter" && "border-[#1DA1F2] text-[#1DA1F2]",
-                            result.source === "reddit" && "border-[#FF4500] text-[#FF4500]",
-                            result.source === "hackernews" && "border-[#FF6600] text-[#FF6600]"
-                          )}>
-                            {result.source === "twitter" && <XIcon />}
-                            {result.source === "reddit" && <RedditIcon />}
-                            {result.source === "hackernews" && <HNIcon />}
-                            {result.source.toUpperCase()}
-                          </span>
-                          
-                          {/* Score */}
-                          {result.score !== undefined && result.score > 0 && (
-                            <span className="font-terminal text-[9px] text-[#555555]">
-                              ↑{result.score}
-                            </span>
-                          )}
-                          
-                          {/* Author */}
-                          {result.authorHandle && (
-                            <span className="font-terminal text-[9px] text-[#555555]">
-                              @{result.authorHandle}
-                            </span>
-                          )}
-                        </div>
+                    {pokeAroundResults
+                      .filter(r => !dismissedPokeIds.has(`${r.source}:${r.id}`))
+                      .map((result) => {
+                        const pokeKey = `${result.source}:${result.id}`;
+                        const isSaving = savingPokeIds.has(pokeKey);
+                        const isSaved = savedPokeIds.has(pokeKey);
                         
-                        <div className="font-terminal text-[11px] text-[#e6e6e6] line-clamp-2">
-                          {result.title || result.content.slice(0, 150)}
-                        </div>
-                      </a>
-                    ))}
+                        return (
+                          <div
+                            key={pokeKey}
+                            className="p-3 bg-[#111113] border border-[#2a2a30] hover:border-[#ffb000] transition-none group/poke"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                {/* Source badge */}
+                                <span className={cn(
+                                  "font-terminal text-[9px] px-1.5 py-0.5 border flex items-center gap-1 shrink-0",
+                                  result.source === "twitter" && "border-[#1DA1F2] text-[#1DA1F2]",
+                                  result.source === "reddit" && "border-[#FF4500] text-[#FF4500]",
+                                  result.source === "hackernews" && "border-[#FF6600] text-[#FF6600]"
+                                )}>
+                                  {result.source === "twitter" && <XIcon />}
+                                  {result.source === "reddit" && <RedditIcon />}
+                                  {result.source === "hackernews" && <HNIcon />}
+                                  {result.source.toUpperCase()}
+                                </span>
+                                
+                                {/* Score */}
+                                {result.score !== undefined && result.score > 0 && (
+                                  <span className="font-terminal text-[9px] text-[#555555]">
+                                    ↑{result.score}
+                                  </span>
+                                )}
+                                
+                                {/* Author */}
+                                {result.authorHandle && (
+                                  <span className="font-terminal text-[9px] text-[#555555] truncate">
+                                    @{result.authorHandle}
+                                  </span>
+                                )}
+                                
+                                {/* Date */}
+                                {result.createdAt && (
+                                  <span className="font-terminal text-[9px] text-[#444444]">
+                                    {formatPokeDate(result.createdAt)}
+                                  </span>
+                                )}
+                              </div>
+                              
+                              {/* Action buttons */}
+                              <div className="flex items-center gap-1 opacity-0 group-hover/poke:opacity-100 transition-opacity shrink-0">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 border border-transparent hover:border-[#00d4aa] hover:bg-transparent"
+                                  onClick={() => handleSavePoke(result)}
+                                  disabled={isSaving || isSaved}
+                                  title={isSaved ? "Saved" : "Save to discoveries"}
+                                >
+                                  {isSaving ? (
+                                    <Loader2 className="w-3 h-3 text-[#888888] animate-spin" />
+                                  ) : isSaved ? (
+                                    <BookmarkCheck className="w-3 h-3 text-[#00d4aa]" />
+                                  ) : (
+                                    <Bookmark className="w-3 h-3 text-[#888888]" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 border border-transparent hover:border-[#ff4444] hover:bg-transparent"
+                                  onClick={() => handleDismissPoke(result)}
+                                  title="Dismiss"
+                                >
+                                  <X className="w-3 h-3 text-[#888888]" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 border border-transparent hover:border-[#ffb000] hover:bg-transparent"
+                                  asChild
+                                >
+                                  <a href={result.url} target="_blank" rel="noopener noreferrer">
+                                    <ExternalLink className="w-3 h-3 text-[#888888]" />
+                                  </a>
+                                </Button>
+                              </div>
+                            </div>
+                            
+                            <a
+                              href={result.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block"
+                            >
+                              <div className="font-terminal text-[11px] text-[#e6e6e6] line-clamp-2 hover:text-[#ffb000]">
+                                {result.title || result.content.slice(0, 150)}
+                              </div>
+                            </a>
+                          </div>
+                        );
+                      })}
                   </div>
                 )}
               </div>
