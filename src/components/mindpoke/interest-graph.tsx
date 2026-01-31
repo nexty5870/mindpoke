@@ -119,17 +119,27 @@ export function InterestGraph({
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [pulsingNodes, setPulsingNodes] = useState<Set<string>>(new Set());
+  const [nodeAnimations, setNodeAnimations] = useState<Map<string, number>>(new Map());
   const simulationRef = useRef<ReturnType<typeof forceSimulation<GraphNode>> | null>(null);
   const dragRef = useRef<{ nodeId: string } | null>(null);
   const positionSaveTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  // Trigger pulse animations when new discoveries arrive
+  // Trigger floating +X animations when new discoveries arrive
   useEffect(() => {
     if (newDiscoveries && newDiscoveries.length > 0) {
-      const newPulsing = new Set(newDiscoveries.filter(d => d.count > 0).map(d => d.interestId));
-      setPulsingNodes(newPulsing);
-      const timeout = setTimeout(() => setPulsingNodes(new Set()), 3000);
+      const animMap = new Map<string, number>();
+      newDiscoveries.forEach(d => {
+        if (d.count > 0) {
+          animMap.set(d.interestId, d.count);
+        }
+      });
+      setNodeAnimations(animMap);
+      
+      // Clear animations after they complete
+      const timeout = setTimeout(() => {
+        setNodeAnimations(new Map());
+      }, 2500);
+      
       return () => clearTimeout(timeout);
     }
   }, [newDiscoveries]);
@@ -195,17 +205,30 @@ export function InterestGraph({
       simulationRef.current.stop();
     }
 
+    // Boundary force to keep nodes in view
+    const boundaryForce = () => {
+      const padding = 100;
+      for (const node of graphData.nodes) {
+        if (node.fx != null) continue; // Skip pinned nodes
+        if (node.x! < padding) node.vx! += 2;
+        if (node.x! > dimensions.width - padding) node.vx! -= 2;
+        if (node.y! < padding) node.vy! += 2;
+        if (node.y! > dimensions.height - padding) node.vy! -= 2;
+      }
+    };
+
     const simulation = forceSimulation<GraphNode>(graphData.nodes)
       .force("link", forceLink<GraphNode, GraphLink>(graphData.links)
         .id(d => d.id)
-        .distance(d => Math.max(120, 200 - d.strength * 10))
-        .strength(d => Math.min(0.7, 0.1 + d.strength * 0.05))
+        .distance(d => Math.max(150, 220 - d.strength * 10))
+        .strength(d => Math.min(0.5, 0.1 + d.strength * 0.03))
       )
-      .force("charge", forceManyBody<GraphNode>().strength(-400).distanceMax(400))
-      .force("center", forceCenter(dimensions.width / 2, dimensions.height / 2).strength(0.05))
-      .force("collision", forceCollide<GraphNode>().radius(90))
-      .alphaDecay(0.02)
-      .velocityDecay(0.4);
+      .force("charge", forceManyBody<GraphNode>().strength(-300).distanceMax(350))
+      .force("center", forceCenter(dimensions.width / 2, dimensions.height / 2).strength(0.1))
+      .force("collision", forceCollide<GraphNode>().radius(85))
+      .force("boundary", boundaryForce)
+      .alphaDecay(0.025)
+      .velocityDecay(0.5);
 
     simulation.on("tick", () => {
       setNodes(simulation.nodes().map(n => ({ ...n })));
@@ -437,21 +460,18 @@ export function InterestGraph({
           {nodes.map((node) => {
             const isSelected = node.id === selectedInterest;
             const isHovered = node.id === hoveredNode;
-            const isPulsing = pulsingNodes.has(node.id);
             const isActive = isSelected || isHovered;
             const isFixed = node.fx != null;
+            const hasNewAnimation = nodeAnimations.has(node.id);
             
-            // Size based on activity
-            const baseSize = 140;
-            const sizeBoost = node.recentActivity * 20;
-            const nodeSize = baseSize + sizeBoost;
+            const nodeSize = 140;
 
             return (
               <motion.div
                 key={node.id}
                 initial={{ scale: 0, opacity: 0 }}
                 animate={{
-                  scale: isPulsing ? [1, 1.1, 1] : 1,
+                  scale: 1,
                   opacity: 1,
                   x: (node.x || 0) - nodeSize / 2,
                   y: (node.y || 0) - 45,
@@ -461,7 +481,6 @@ export function InterestGraph({
                   type: "spring", 
                   damping: 30, 
                   stiffness: 400,
-                  scale: isPulsing ? { repeat: 2, duration: 0.5 } : undefined
                 }}
                 className={cn(
                   "absolute cursor-grab active:cursor-grabbing",
@@ -474,25 +493,6 @@ export function InterestGraph({
                 onClick={() => !isDragging && onSelectInterest(node.id === selectedInterest ? null : node.id)}
                 onDoubleClick={() => handleDoubleClick(node.id)}
               >
-                {/* Pulsing ring effect */}
-                {isPulsing && (
-                  <motion.div
-                    className="absolute inset-0 border-2 border-[#00d4aa] rounded-none"
-                    initial={{ scale: 1, opacity: 0.8 }}
-                    animate={{ scale: 1.5, opacity: 0 }}
-                    transition={{ repeat: Infinity, duration: 1 }}
-                  />
-                )}
-                
-                {/* Activity ring */}
-                {node.recentActivity > 0.3 && (
-                  <div 
-                    className="absolute -inset-1 border border-[#00d4aa] opacity-30"
-                    style={{
-                      boxShadow: `0 0 ${10 + node.recentActivity * 15}px rgba(0,212,170,${node.recentActivity * 0.4})`
-                    }}
-                  />
-                )}
 
                 <div className={cn(
                   "relative border transition-all duration-200",
@@ -515,27 +515,17 @@ export function InterestGraph({
                   ))}
 
                   <div className="px-4 py-3">
-                    {/* Heat visualization - animated bars */}
+                    {/* Heat visualization bars */}
                     <div className="flex gap-[2px] mb-2 justify-center">
                       {[...Array(5)].map((_, i) => (
-                        <motion.div 
+                        <div 
                           key={i} 
                           className={cn(
                             "w-[3px] transition-all",
                             i < node.heatLevel
-                              ? "bg-gradient-to-t from-[#ffb000] to-[#00d4aa]"
-                              : "bg-[#2a2a30]"
+                              ? "h-3 bg-gradient-to-t from-[#ffb000] to-[#00d4aa]"
+                              : "h-2 bg-[#2a2a30]"
                           )}
-                          initial={{ height: 8 }}
-                          animate={{ 
-                            height: i < node.heatLevel ? 12 + (isPulsing ? 4 : 0) : 8 
-                          }}
-                          transition={{ 
-                            repeat: isPulsing ? Infinity : 0, 
-                            repeatType: "reverse",
-                            duration: 0.3,
-                            delay: i * 0.05
-                          }}
                         />
                       ))}
                     </div>
@@ -579,6 +569,26 @@ export function InterestGraph({
                       <Icon icon="icon-park-twotone:pin" className="w-3 h-3 text-[#00d4aa]" />
                     </div>
                   )}
+
+                  {/* Floating +X animation */}
+                  <AnimatePresence>
+                    {hasNewAnimation && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 0, scale: 0.8 }}
+                        animate={{ opacity: [0, 1, 1, 1, 0], y: -50, scale: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 1.8, ease: "easeOut", times: [0, 0.1, 0.5, 0.8, 1] }}
+                        className="absolute -top-2 left-1/2 -translate-x-1/2 pointer-events-none flex flex-col items-center"
+                      >
+                        <span className="font-terminal text-sm text-[#00d4aa] drop-shadow-[0_0_10px_rgba(0,212,170,0.9)]">
+                          +{nodeAnimations.get(node.id)}
+                        </span>
+                        <span className="font-terminal text-[8px] text-[#ffb000] mt-0.5 drop-shadow-[0_0_6px_rgba(255,176,0,0.8)]">
+                          NEW
+                        </span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </motion.div>
             );
