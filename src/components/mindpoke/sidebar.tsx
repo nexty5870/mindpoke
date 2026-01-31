@@ -147,11 +147,14 @@ export function Sidebar({
           {interests.map((interest) => {
             const heatLevel = getHeatLevel(interest);
             return (
-              <button
+              <div
                 key={interest.id}
                 onClick={() => onSelectInterest(interest.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && onSelectInterest(interest.id)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-3 py-3 text-left transition-none border group",
+                  "w-full flex items-center gap-3 px-3 py-3 text-left transition-none border group cursor-pointer",
                   selectedInterest === interest.id
                     ? "bg-[#1a1a1f] border-[#00d4aa]"
                     : "border-transparent hover:bg-[#1a1a1f] hover:border-[#2a2a30]"
@@ -225,7 +228,7 @@ export function Sidebar({
                     )}
                   </div>
                 )}
-              </button>
+              </div>
             );
           })}
         </div>
