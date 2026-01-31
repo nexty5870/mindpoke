@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  mindpoke:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - DATABASE_URL=${DATABASE_URL}
+        - OPENAI_API_KEY=${OPENAI_API_KEY}
+        - TWITTER_BEARER_TOKEN=${TWITTER_BEARER_TOKEN}
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - TWITTER_BEARER_TOKEN=${TWITTER_BEARER_TOKEN}
+    restart: unless-stopped

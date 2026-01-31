@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Github, Zap, Brain, Bell, ArrowRight } from "lucide-react";
+import { HeroWebGL } from "@/components/landing/hero-webgl";
 
 export default function LandingPage() {
   return (
@@ -35,8 +36,11 @@ export default function LandingPage() {
       </header>
 
       {/* Hero */}
-      <section className="max-w-6xl mx-auto px-6 py-24 md:py-32">
-        <div className="max-w-3xl">
+      <section className="relative max-w-6xl mx-auto px-6 py-24 md:py-32 overflow-hidden">
+        {/* WebGL Background */}
+        <HeroWebGL />
+        
+        <div className="max-w-3xl relative z-10">
           {/* Terminal label */}
           <div className="font-terminal text-xs text-[#555555] mb-6">
             $ SYSTEM_INIT :: COGNITIVE_FEED_AGENT
