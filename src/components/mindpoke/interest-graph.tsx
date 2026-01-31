@@ -7,6 +7,8 @@ import {
   forceManyBody,
   forceCenter,
   forceCollide,
+  forceX,
+  forceY,
   SimulationNodeDatum,
   SimulationLinkDatum,
 } from "d3-force";
@@ -205,32 +207,28 @@ export function InterestGraph({
       simulationRef.current.stop();
     }
 
-    // Boundary force to keep nodes in view
-    const boundaryForce = () => {
-      const padding = 100;
-      for (const node of graphData.nodes) {
-        if (node.fx != null) continue; // Skip pinned nodes
-        if (node.x! < padding) node.vx! += 2;
-        if (node.x! > dimensions.width - padding) node.vx! -= 2;
-        if (node.y! < padding) node.vy! += 2;
-        if (node.y! > dimensions.height - padding) node.vy! -= 2;
-      }
-    };
-
     const simulation = forceSimulation<GraphNode>(graphData.nodes)
       .force("link", forceLink<GraphNode, GraphLink>(graphData.links)
         .id(d => d.id)
         .distance(d => Math.max(150, 220 - d.strength * 10))
         .strength(d => Math.min(0.5, 0.1 + d.strength * 0.03))
       )
-      .force("charge", forceManyBody<GraphNode>().strength(-300).distanceMax(350))
-      .force("center", forceCenter(dimensions.width / 2, dimensions.height / 2).strength(0.1))
+      .force("charge", forceManyBody<GraphNode>().strength(-200).distanceMax(300))
+      .force("center", forceCenter(dimensions.width / 2, dimensions.height / 2).strength(0.15))
       .force("collision", forceCollide<GraphNode>().radius(85))
-      .force("boundary", boundaryForce)
-      .alphaDecay(0.025)
-      .velocityDecay(0.5);
-
+      .force("x", forceX(dimensions.width / 2).strength(0.08))
+      .force("y", forceY(dimensions.height / 2).strength(0.08))
+      .alphaDecay(0.03)
+      .velocityDecay(0.6);
+    
+    // Boundary clamping on each tick
     simulation.on("tick", () => {
+      const padding = 80;
+      for (const node of simulation.nodes()) {
+        if (node.fx != null) continue;
+        node.x = Math.max(padding, Math.min(dimensions.width - padding, node.x!));
+        node.y = Math.max(padding, Math.min(dimensions.height - padding, node.y!));
+      }
       setNodes(simulation.nodes().map(n => ({ ...n })));
       setLinks(graphData.links.map(l => ({ ...l })));
     });
