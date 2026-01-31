@@ -7,8 +7,6 @@ import {
   forceManyBody,
   forceCenter,
   forceCollide,
-  forceX,
-  forceY,
   SimulationNodeDatum,
   SimulationLinkDatum,
 } from "d3-force";
@@ -27,91 +25,71 @@ interface InterestGraphProps {
   discoveries: Discovery[];
   selectedInterest: string | null;
   onSelectInterest: (id: string | null) => void;
-  newDiscoveries?: DiscoveryStat[] | null; // Per-node discovery counts from latest scan
+  newDiscoveries?: DiscoveryStat[] | null;
 }
 
 interface GraphNode extends SimulationNodeDatum {
   id: string;
   interest: Interest;
   discoveryCount: number;
+  recentActivity: number; // 0-1 based on recent discoveries
   heatLevel: number;
 }
 
 interface GraphLink extends SimulationLinkDatum<GraphNode> {
   id: string;
   strength: number;
-  reason: string;
+  sharedCount: number; // discoveries matching both interests
 }
 
-// Calculate connections between interests
-function calculateConnections(a: Interest, b: Interest): { strength: number; reason: string } | null {
-  const aKeywords = a.keywords.map(k => k.toLowerCase());
-  const bKeywords = b.keywords.map(k => k.toLowerCase());
-  const aName = a.name.toLowerCase();
-  const bName = b.name.toLowerCase();
+// Calculate connections based on shared discoveries
+function calculateConnections(
+  interests: Interest[],
+  discoveries: Discovery[]
+): GraphLink[] {
+  const links: GraphLink[] = [];
   
-  const reasons: string[] = [];
-  let strength = 0;
-  
-  // 1. Direct keyword overlap
-  aKeywords.forEach(aKw => {
-    bKeywords.forEach(bKw => {
-      if (aKw === bKw) {
-        reasons.push(aKw);
-        strength += 2;
-      } else if (aKw.includes(bKw) || bKw.includes(aKw)) {
-        reasons.push(`${aKw}~${bKw}`);
-        strength += 1;
-      }
-    });
-  });
-  
-  // 2. Name in keywords
-  if (aKeywords.some(k => k.includes(bName) || bName.includes(k))) {
-    reasons.push(`name:${bName}`);
-    strength += 1.5;
-  }
-  if (bKeywords.some(k => k.includes(aName) || aName.includes(k))) {
-    reasons.push(`name:${aName}`);
-    strength += 1.5;
-  }
-  
-  // 3. Semantic relationships
-  const semanticPairs: [string[], string[], number][] = [
-    [["llm", "llama", "ollama", "mistral", "local llm"], ["ai", "artificial intelligence", "machine learning"], 1.5],
-    [["claude", "anthropic", "claude code"], ["ai", "artificial intelligence", "llm"], 1.5],
-    [["gpt", "openai", "chatgpt"], ["ai", "artificial intelligence", "llm"], 1.5],
-    [["agent", "agents", "ai agents", "autonomous"], ["ai", "artificial intelligence", "llm"], 1.5],
-    [["claude", "anthropic"], ["agent", "agents", "ai agents"], 1],
-    [["langchain", "autogpt", "crewai"], ["agent", "agents", "ai agents"], 1.5],
-  ];
-  
-  const allATerms = [...aKeywords, aName];
-  const allBTerms = [...bKeywords, bName];
-  
-  semanticPairs.forEach(([group1, group2, weight]) => {
-    const aHasGroup1 = allATerms.some(t => group1.some(g => t.includes(g) || g.includes(t)));
-    const aHasGroup2 = allATerms.some(t => group2.some(g => t.includes(g) || g.includes(t)));
-    const bHasGroup1 = allBTerms.some(t => group1.some(g => t.includes(g) || g.includes(t)));
-    const bHasGroup2 = allBTerms.some(t => group2.some(g => t.includes(g) || g.includes(t)));
-    
-    if ((aHasGroup1 && bHasGroup2) || (aHasGroup2 && bHasGroup1)) {
-      const matchedTerms = [
-        ...group1.filter(g => allATerms.some(t => t.includes(g)) || allBTerms.some(t => t.includes(g))),
-        ...group2.filter(g => allATerms.some(t => t.includes(g)) || allBTerms.some(t => t.includes(g))),
-      ].slice(0, 2);
-      const key = matchedTerms.join("↔");
-      if (!reasons.includes(key)) {
-        reasons.push(key);
-        strength += weight;
+  for (let i = 0; i < interests.length; i++) {
+    for (let j = i + 1; j < interests.length; j++) {
+      const a = interests[i];
+      const b = interests[j];
+      
+      // Count discoveries that match both interests (via keywords or direct match)
+      const aKeywords = new Set(a.keywords.map(k => k.toLowerCase()));
+      const bKeywords = new Set(b.keywords.map(k => k.toLowerCase()));
+      
+      // Check for keyword overlap
+      let overlap = 0;
+      aKeywords.forEach(kw => {
+        if (bKeywords.has(kw)) overlap += 2;
+        bKeywords.forEach(bkw => {
+          if (kw.includes(bkw) || bkw.includes(kw)) overlap += 0.5;
+        });
+      });
+      
+      // Count shared discoveries
+      const sharedDiscoveries = discoveries.filter(d => {
+        const content = (d.title + ' ' + d.content).toLowerCase();
+        const matchesA = a.keywords.some(k => content.includes(k.toLowerCase()));
+        const matchesB = b.keywords.some(k => content.includes(k.toLowerCase()));
+        return matchesA && matchesB;
+      }).length;
+      
+      const strength = overlap + sharedDiscoveries * 0.5;
+      
+      if (strength > 0.5) {
+        links.push({
+          id: `${a.id}-${b.id}`,
+          source: a.id as any,
+          target: b.id as any,
+          strength: Math.min(strength, 10),
+          sharedCount: sharedDiscoveries,
+        });
       }
     }
-  });
-  
-  if (strength > 0) {
-    return { strength, reason: reasons.slice(0, 3).join(", ") };
   }
-  return null;
+  
+  return links;
 }
 
 // Save position to API
@@ -134,37 +112,27 @@ export function InterestGraph({
   onSelectInterest,
   newDiscoveries,
 }: InterestGraphProps) {
-  // Track floating "+X" animations per node
-  const [nodeAnimations, setNodeAnimations] = useState<Map<string, number>>(new Map());
-
-  // Trigger animations when newDiscoveries changes
-  useEffect(() => {
-    if (newDiscoveries && newDiscoveries.length > 0) {
-      const animMap = new Map<string, number>();
-      newDiscoveries.forEach(d => {
-        if (d.count > 0) {
-          animMap.set(d.interestId, d.count);
-        }
-      });
-      setNodeAnimations(animMap);
-      
-      // Clear animations after they complete
-      const timeout = setTimeout(() => {
-        setNodeAnimations(new Map());
-      }, 2000);
-      
-      return () => clearTimeout(timeout);
-    }
-  }, [newDiscoveries]);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [links, setLinks] = useState<GraphLink[]>([]);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const [hoveredLink, setHoveredLink] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [pulsingNodes, setPulsingNodes] = useState<Set<string>>(new Set());
   const simulationRef = useRef<ReturnType<typeof forceSimulation<GraphNode>> | null>(null);
   const dragRef = useRef<{ nodeId: string } | null>(null);
   const positionSaveTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // Trigger pulse animations when new discoveries arrive
+  useEffect(() => {
+    if (newDiscoveries && newDiscoveries.length > 0) {
+      const newPulsing = new Set(newDiscoveries.filter(d => d.count > 0).map(d => d.interestId));
+      setPulsingNodes(newPulsing);
+      const timeout = setTimeout(() => setPulsingNodes(new Set()), 3000);
+      return () => clearTimeout(timeout);
+    }
+  }, [newDiscoveries]);
 
   // Update dimensions on resize
   useEffect(() => {
@@ -181,24 +149,32 @@ export function InterestGraph({
     return () => window.removeEventListener("resize", updateDimensions);
   }, []);
 
-  // Build initial graph data
+  // Build graph data
   const graphData = useMemo(() => {
+    // Calculate recent activity (discoveries in last 24h)
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    
     const graphNodes: GraphNode[] = interests.map((interest, index) => {
-      const discoveryCount = discoveries.filter(
-        (d) => d.matchedInterests.includes(interest.id) && d.status === "new"
-      ).length;
-      const heatLevel = Math.round(
-        (interest.engagementCount / (interest.engagementCount + interest.dismissCount + 1)) * 5
+      const matchedDiscoveries = discoveries.filter(
+        d => d.matchedInterests.includes(interest.id)
       );
+      const newCount = matchedDiscoveries.filter(d => d.status === "new").length;
+      const recentCount = matchedDiscoveries.filter(
+        d => new Date(d.publishedAt).getTime() > dayAgo
+      ).length;
+      
+      const heatLevel = Math.min(5, Math.round(interest.heat / 20));
+      const recentActivity = Math.min(1, recentCount / 10);
       
       const hasPosition = interest.positionX != null && interest.positionY != null;
       const angle = (index / Math.max(interests.length, 1)) * 2 * Math.PI - Math.PI / 2;
-      const radius = 150;
+      const radius = Math.min(dimensions.width, dimensions.height) * 0.25;
       
       return {
         id: interest.id,
         interest,
-        discoveryCount,
+        discoveryCount: newCount,
+        recentActivity,
         heatLevel,
         x: hasPosition ? interest.positionX! : dimensions.width / 2 + Math.cos(angle) * radius,
         y: hasPosition ? interest.positionY! : dimensions.height / 2 + Math.sin(angle) * radius,
@@ -207,22 +183,7 @@ export function InterestGraph({
       };
     });
 
-    const graphLinks: GraphLink[] = [];
-    for (let i = 0; i < interests.length; i++) {
-      for (let j = i + 1; j < interests.length; j++) {
-        const connection = calculateConnections(interests[i], interests[j]);
-        if (connection) {
-          graphLinks.push({
-            id: `${interests[i].id}-${interests[j].id}`,
-            source: interests[i].id as any,
-            target: interests[j].id as any,
-            strength: connection.strength,
-            reason: connection.reason,
-          });
-        }
-      }
-    }
-
+    const graphLinks = calculateConnections(interests, discoveries);
     return { nodes: graphNodes, links: graphLinks };
   }, [interests, discoveries, dimensions]);
 
@@ -237,26 +198,21 @@ export function InterestGraph({
     const simulation = forceSimulation<GraphNode>(graphData.nodes)
       .force("link", forceLink<GraphNode, GraphLink>(graphData.links)
         .id(d => d.id)
-        .distance(d => Math.max(100, 180 - d.strength * 15))
-        .strength(d => Math.min(0.8, 0.15 + d.strength * 0.1))
+        .distance(d => Math.max(120, 200 - d.strength * 10))
+        .strength(d => Math.min(0.7, 0.1 + d.strength * 0.05))
       )
-      .force("charge", forceManyBody<GraphNode>().strength(-250).distanceMax(350))
-      .force("center", forceCenter(dimensions.width / 2, dimensions.height / 2).strength(0.03))
-      .force("collision", forceCollide<GraphNode>().radius(85))
-      .force("x", forceX(dimensions.width / 2).strength(0.02))
-      .force("y", forceY(dimensions.height / 2).strength(0.02))
-      .alphaDecay(0.015)
-      .velocityDecay(0.35);
+      .force("charge", forceManyBody<GraphNode>().strength(-400).distanceMax(400))
+      .force("center", forceCenter(dimensions.width / 2, dimensions.height / 2).strength(0.05))
+      .force("collision", forceCollide<GraphNode>().radius(90))
+      .alphaDecay(0.02)
+      .velocityDecay(0.4);
 
     simulation.on("tick", () => {
-      // Update state with current positions - spread to trigger re-render
       setNodes(simulation.nodes().map(n => ({ ...n })));
-      // Links now have resolved source/target objects from d3
       setLinks(graphData.links.map(l => ({ ...l })));
     });
 
     simulationRef.current = simulation;
-
     return () => { simulation.stop(); };
   }, [graphData, dimensions]);
 
@@ -295,12 +251,9 @@ export function InterestGraph({
     const node = simulationRef.current.nodes().find(n => n.id === nodeId);
     
     if (node && node.fx != null && node.fy != null) {
-      const x = node.fx;
-      const y = node.fy;
-      
       if (positionSaveTimeout.current) clearTimeout(positionSaveTimeout.current);
       positionSaveTimeout.current = setTimeout(() => {
-        saveNodePosition(nodeId, x, y);
+        saveNodePosition(nodeId, node.fx!, node.fy!);
       }, 500);
     }
     
@@ -321,6 +274,15 @@ export function InterestGraph({
     }
   }, []);
 
+  // Get node position by ID for link rendering
+  const getNodePos = (nodeOrId: GraphNode | string) => {
+    if (typeof nodeOrId === 'string') {
+      const node = nodes.find(n => n.id === nodeOrId);
+      return node ? { x: node.x || 0, y: node.y || 0 } : { x: 0, y: 0 };
+    }
+    return { x: nodeOrId.x || 0, y: nodeOrId.y || 0 };
+  };
+
   return (
     <div 
       ref={containerRef}
@@ -331,59 +293,183 @@ export function InterestGraph({
     >
       {/* Header */}
       <div className="absolute top-4 left-4 z-10 font-terminal text-[10px] text-[#555555]">
-        <div>$ GRAPH_RENDER :: FORCE_DIRECTED</div>
-        <div className="text-[#00d4aa]">NODES: {nodes.length} | PHYSICS: ACTIVE</div>
+        <div>$ INTEREST_NETWORK :: LIVE</div>
+        <div className="text-[#00d4aa]">
+          NODES: {nodes.length} | EDGES: {links.length} | ACTIVITY: {discoveries.filter(d => d.status === 'new').length}
+        </div>
       </div>
 
-      {/* SVG for grid background */}
+      {/* SVG Layer - Grid + Connections */}
       <svg 
-        className="absolute inset-0 pointer-events-none" 
+        className="absolute inset-0" 
         style={{ zIndex: 1 }}
         width={dimensions.width} 
         height={dimensions.height}
       >
-        {/* Grid */}
-        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(42, 42, 48, 0.3)" strokeWidth="1"/>
-        </pattern>
+        {/* Definitions for gradients and filters */}
+        <defs>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(42, 42, 48, 0.3)" strokeWidth="1"/>
+          </pattern>
+          
+          {/* Glow filter for active connections */}
+          <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+            <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+          
+          {/* Animated dash pattern */}
+          <linearGradient id="linkGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#00d4aa" stopOpacity="0.1"/>
+            <stop offset="50%" stopColor="#00d4aa" stopOpacity="0.6"/>
+            <stop offset="100%" stopColor="#00d4aa" stopOpacity="0.1"/>
+          </linearGradient>
+        </defs>
+        
+        {/* Grid background */}
         <rect width="100%" height="100%" fill="url(#grid)" />
+        
+        {/* Connection lines */}
+        <g className="connections">
+          {links.map(link => {
+            const source = getNodePos(link.source as any);
+            const target = getNodePos(link.target as any);
+            const sourceId = typeof link.source === 'string' ? link.source : (link.source as GraphNode).id;
+            const targetId = typeof link.target === 'string' ? link.target : (link.target as GraphNode).id;
+            const isHighlighted = hoveredNode === sourceId || hoveredNode === targetId || 
+                                  selectedInterest === sourceId || selectedInterest === targetId;
+            const isHovered = hoveredLink === link.id;
+            const opacity = isHighlighted ? 0.8 : isHovered ? 0.6 : 0.2 + link.strength * 0.03;
+            const strokeWidth = isHighlighted ? 2 + link.strength * 0.3 : 1 + link.strength * 0.2;
+            
+            return (
+              <g key={link.id}>
+                {/* Base line */}
+                <line
+                  x1={source.x}
+                  y1={source.y}
+                  x2={target.x}
+                  y2={target.y}
+                  stroke={isHighlighted ? "#00d4aa" : "#3a3a40"}
+                  strokeWidth={strokeWidth}
+                  opacity={opacity}
+                  strokeLinecap="round"
+                  className="transition-all duration-300"
+                  filter={isHighlighted ? "url(#glow)" : undefined}
+                  onMouseEnter={() => setHoveredLink(link.id)}
+                  onMouseLeave={() => setHoveredLink(null)}
+                  style={{ cursor: 'pointer' }}
+                />
+                
+                {/* Animated particles on active connections */}
+                {isHighlighted && link.sharedCount > 0 && (
+                  <>
+                    <circle r="3" fill="#00d4aa" opacity="0.8">
+                      <animateMotion
+                        dur={`${3 - Math.min(link.strength, 2)}s`}
+                        repeatCount="indefinite"
+                        path={`M${source.x},${source.y} L${target.x},${target.y}`}
+                      />
+                    </circle>
+                    <circle r="2" fill="#ffb000" opacity="0.6">
+                      <animateMotion
+                        dur={`${4 - Math.min(link.strength, 2)}s`}
+                        repeatCount="indefinite"
+                        path={`M${target.x},${target.y} L${source.x},${source.y}`}
+                      />
+                    </circle>
+                  </>
+                )}
+                
+                {/* Shared count label on hover */}
+                {isHovered && link.sharedCount > 0 && (
+                  <g transform={`translate(${(source.x + target.x) / 2}, ${(source.y + target.y) / 2})`}>
+                    <rect x="-20" y="-10" width="40" height="20" fill="#111113" stroke="#2a2a30" rx="2"/>
+                    <text 
+                      textAnchor="middle" 
+                      dominantBaseline="middle"
+                      className="font-terminal text-[9px] fill-[#00d4aa]"
+                    >
+                      {link.sharedCount} shared
+                    </text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+        </g>
       </svg>
 
-      {/* Nodes */}
+      {/* Nodes Layer */}
       <div className="absolute inset-0" style={{ zIndex: 2 }}>
         <AnimatePresence>
           {nodes.map((node) => {
             const isSelected = node.id === selectedInterest;
             const isHovered = node.id === hoveredNode;
+            const isPulsing = pulsingNodes.has(node.id);
             const isActive = isSelected || isHovered;
             const isFixed = node.fx != null;
+            
+            // Size based on activity
+            const baseSize = 140;
+            const sizeBoost = node.recentActivity * 20;
+            const nodeSize = baseSize + sizeBoost;
 
             return (
               <motion.div
                 key={node.id}
                 initial={{ scale: 0, opacity: 0 }}
                 animate={{
-                  scale: 1,
+                  scale: isPulsing ? [1, 1.1, 1] : 1,
                   opacity: 1,
-                  x: (node.x || 0) - 70,
+                  x: (node.x || 0) - nodeSize / 2,
                   y: (node.y || 0) - 45,
                 }}
                 exit={{ scale: 0, opacity: 0 }}
-                transition={{ type: "spring", damping: 30, stiffness: 400 }}
+                transition={{ 
+                  type: "spring", 
+                  damping: 30, 
+                  stiffness: 400,
+                  scale: isPulsing ? { repeat: 2, duration: 0.5 } : undefined
+                }}
                 className={cn(
                   "absolute cursor-grab active:cursor-grabbing",
                   isDragging && dragRef.current?.nodeId === node.id && "z-20"
                 )}
+                style={{ width: nodeSize }}
                 onMouseDown={(e) => handleMouseDown(e, node.id)}
                 onMouseEnter={() => setHoveredNode(node.id)}
                 onMouseLeave={() => setHoveredNode(null)}
                 onClick={() => !isDragging && onSelectInterest(node.id === selectedInterest ? null : node.id)}
                 onDoubleClick={() => handleDoubleClick(node.id)}
               >
+                {/* Pulsing ring effect */}
+                {isPulsing && (
+                  <motion.div
+                    className="absolute inset-0 border-2 border-[#00d4aa] rounded-none"
+                    initial={{ scale: 1, opacity: 0.8 }}
+                    animate={{ scale: 1.5, opacity: 0 }}
+                    transition={{ repeat: Infinity, duration: 1 }}
+                  />
+                )}
+                
+                {/* Activity ring */}
+                {node.recentActivity > 0.3 && (
+                  <div 
+                    className="absolute -inset-1 border border-[#00d4aa] opacity-30"
+                    style={{
+                      boxShadow: `0 0 ${10 + node.recentActivity * 15}px rgba(0,212,170,${node.recentActivity * 0.4})`
+                    }}
+                  />
+                )}
+
                 <div className={cn(
-                  "relative border transition-all duration-200 min-w-[140px]",
+                  "relative border transition-all duration-200",
                   isSelected
-                    ? "border-[#00d4aa] bg-[#0a0a0f] shadow-[0_0_25px_rgba(0,212,170,0.4)]"
+                    ? "border-[#00d4aa] bg-[#0a0a0f] shadow-[0_0_30px_rgba(0,212,170,0.5)]"
                     : isActive
                     ? "border-[#3a3a40] bg-[#111113]"
                     : "border-[#2a2a30] bg-[#111113] hover:border-[#3a3a40]"
@@ -401,15 +487,28 @@ export function InterestGraph({
                   ))}
 
                   <div className="px-4 py-3">
-                    {/* Heat bars */}
+                    {/* Heat visualization - animated bars */}
                     <div className="flex gap-[2px] mb-2 justify-center">
                       {[...Array(5)].map((_, i) => (
-                        <div key={i} className={cn(
-                          "w-[3px] transition-all",
-                          i < node.heatLevel
-                            ? "h-3 bg-gradient-to-t from-[#ffb000] to-[#00d4aa]"
-                            : "h-2 bg-[#2a2a30]"
-                        )}/>
+                        <motion.div 
+                          key={i} 
+                          className={cn(
+                            "w-[3px] transition-all",
+                            i < node.heatLevel
+                              ? "bg-gradient-to-t from-[#ffb000] to-[#00d4aa]"
+                              : "bg-[#2a2a30]"
+                          )}
+                          initial={{ height: 8 }}
+                          animate={{ 
+                            height: i < node.heatLevel ? 12 + (isPulsing ? 4 : 0) : 8 
+                          }}
+                          transition={{ 
+                            repeat: isPulsing ? Infinity : 0, 
+                            repeatType: "reverse",
+                            duration: 0.3,
+                            delay: i * 0.05
+                          }}
+                        />
                       ))}
                     </div>
 
@@ -418,15 +517,23 @@ export function InterestGraph({
                       isSelected ? "text-white" : "text-[#e6e6e6]"
                     )}>{node.interest.name}</h3>
 
-                    <div className="font-terminal text-[9px] text-[#555555] text-center mt-1">
-                      PRI:{node.interest.priority} | ENG:{node.interest.engagementCount}
+                    {/* Stats row */}
+                    <div className="font-terminal text-[9px] text-[#555555] text-center mt-1 flex justify-center gap-2">
+                      <span>H:{Math.round(node.interest.heat)}</span>
+                      <span>•</span>
+                      <span>E:{node.interest.engagementCount}</span>
                     </div>
 
+                    {/* New discoveries badge */}
                     {node.discoveryCount > 0 && (
-                      <div className="flex items-center justify-center gap-1 mt-1.5 font-terminal text-[9px]">
-                        <span className="w-1.5 h-1.5 bg-[#ffb000] animate-pulse" />
+                      <motion.div 
+                        className="flex items-center justify-center gap-1 mt-1.5 font-terminal text-[9px]"
+                        animate={{ opacity: [1, 0.5, 1] }}
+                        transition={{ repeat: Infinity, duration: 1.5 }}
+                      >
+                        <span className="w-1.5 h-1.5 bg-[#ffb000]" />
                         <span className="text-[#ffb000]">{node.discoveryCount} NEW</span>
-                      </div>
+                      </motion.div>
                     )}
                   </div>
 
@@ -438,32 +545,12 @@ export function InterestGraph({
                       : "border-[#2a2a30] text-[#888888]"
                   )}>{node.interest.priority}</div>
 
-                  {/* Pinned/Locked indicator */}
+                  {/* Pinned indicator */}
                   {isFixed && (
                     <div className="absolute -top-2 -left-2 w-5 h-5 flex items-center justify-center border border-[#00d4aa] bg-[#0a0a0f]">
                       <Icon icon="icon-park-twotone:pin" className="w-3 h-3 text-[#00d4aa]" />
                     </div>
                   )}
-
-                  {/* Floating +X animation - pixel style */}
-                  <AnimatePresence>
-                    {nodeAnimations.has(node.id) && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 0, scale: 0.8 }}
-                        animate={{ opacity: [0, 1, 1, 1, 0], y: -50, scale: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 1.8, ease: "easeOut", times: [0, 0.1, 0.5, 0.8, 1] }}
-                        className="absolute -top-2 left-1/2 -translate-x-1/2 pointer-events-none flex flex-col items-center"
-                      >
-                        <span className="font-pixel text-xs text-[#00d4aa] drop-shadow-[0_0_10px_rgba(0,212,170,0.9)] tracking-wider">
-                          +{nodeAnimations.get(node.id)}
-                        </span>
-                        <span className="font-pixel text-[8px] text-[#ffb000] mt-1 drop-shadow-[0_0_6px_rgba(255,176,0,0.8)]">
-                          NEW
-                        </span>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </div>
               </motion.div>
             );
@@ -471,9 +558,26 @@ export function InterestGraph({
         </AnimatePresence>
       </div>
 
+      {/* Legend */}
+      <div className="absolute bottom-4 right-4 z-10 font-terminal text-[9px] text-[#555555] bg-[#111113]/80 border border-[#2a2a30] p-3">
+        <div className="text-[#888888] mb-2">LEGEND</div>
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-8 h-[2px] bg-[#3a3a40]" />
+          <span>weak link</span>
+        </div>
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-8 h-[2px] bg-[#00d4aa]" />
+          <span>strong link</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-[#00d4aa] animate-pulse" />
+          <span>active flow</span>
+        </div>
+      </div>
+
       {/* Instructions */}
       <div className="absolute bottom-4 left-4 z-10 font-terminal text-[10px] text-[#555555]">
-        DRAG: PLACE_NODE | DOUBLE-CLICK: RESET | CLICK: SELECT
+        DRAG: PLACE | DBL-CLICK: UNPIN | HOVER: CONNECTIONS
       </div>
     </div>
   );
