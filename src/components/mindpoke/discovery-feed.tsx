@@ -20,8 +20,20 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Icon } from "@iconify/react";
 import { cn } from "@/lib/utils";
 import type { Discovery, Interest, DiscoverySource } from "@/types";
+
+interface PokeAroundResult {
+  source: "twitter" | "reddit" | "hackernews";
+  id: string;
+  title?: string;
+  content: string;
+  url: string;
+  author?: string;
+  authorHandle?: string;
+  score?: number;
+}
 
 // Format timestamp - "30 Jan, 22:21"
 function formatDateTime(date: Date | string): string {
@@ -157,6 +169,10 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
   const [showSimilar, setShowSimilar] = useState(false);
   const [similarDiscoveries, setSimilarDiscoveries] = useState<SimilarDiscovery[]>([]);
   const [isLoadingSimilar, setIsLoadingSimilar] = useState(false);
+  const [showPokeAround, setShowPokeAround] = useState(false);
+  const [pokeAroundResults, setPokeAroundResults] = useState<PokeAroundResult[]>([]);
+  const [isLoadingPokeAround, setIsLoadingPokeAround] = useState(false);
+  const [pokeAroundTerms, setPokeAroundTerms] = useState<string[]>([]);
 
   const handleSave = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -193,6 +209,36 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
       console.error("Failed to load similar:", err);
     } finally {
       setIsLoadingSimilar(false);
+    }
+  };
+
+  const handlePokeAround = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (showPokeAround) {
+      setShowPokeAround(false);
+      return;
+    }
+    
+    setIsLoadingPokeAround(true);
+    setShowPokeAround(true);
+    setShowSimilar(false); // Close similar panel
+    
+    try {
+      const res = await fetch("/api/discoveries/poke-around", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ discoveryId: discovery.id, limit: 5 }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPokeAroundResults(data.data);
+        setPokeAroundTerms(data.meta?.searchTerms || []);
+      }
+    } catch (err) {
+      console.error("Failed to poke around:", err);
+    } finally {
+      setIsLoadingPokeAround(false);
     }
   };
 
@@ -376,6 +422,24 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
                     "w-4 h-4",
                     showSimilar ? "text-[#00d4aa]" : "text-[#888888]"
                   )} />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className={cn(
+                    "h-8 w-8 border border-transparent hover:border-[#ffb000] hover:bg-transparent",
+                    showPokeAround && "border-[#ffb000] bg-[#ffb000]/10"
+                  )}
+                  onClick={handlePokeAround}
+                  title="Poke Around - find similar on X, Reddit, HN"
+                >
+                  <Icon 
+                    icon="ph:compass-bold" 
+                    className={cn(
+                      "w-4 h-4",
+                      showPokeAround ? "text-[#ffb000]" : "text-[#888888]"
+                    )} 
+                  />
                 </Button>
                 <Button 
                   variant="ghost" 
@@ -610,6 +674,101 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
                         
                         <div className="font-terminal text-[11px] text-[#e6e6e6] line-clamp-2">
                           {similar.title || similar.content.slice(0, 150)}
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Poke Around Panel */}
+        <AnimatePresence>
+          {showPokeAround && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              className="overflow-hidden border-t border-[#ffb000]/30"
+            >
+              <div className="bg-[#ffb000]/5 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon icon="ph:compass-bold" className="w-4 h-4 text-[#ffb000]" />
+                  <span className="font-terminal text-[10px] text-[#ffb000]">
+                    ── POKE AROUND ──
+                  </span>
+                </div>
+                
+                {/* Search terms used */}
+                {pokeAroundTerms.length > 0 && (
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
+                    <span className="font-terminal text-[9px] text-[#555555]">TERMS:</span>
+                    {pokeAroundTerms.map((term, i) => (
+                      <span key={i} className="font-terminal text-[9px] px-1.5 py-0.5 bg-[#1a1a1f] border border-[#2a2a30] text-[#888888]">
+                        {term}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {isLoadingPokeAround ? (
+                  <div className="flex items-center gap-3 py-4">
+                    <Loader2 className="w-4 h-4 text-[#ffb000] animate-spin" />
+                    <span className="font-terminal text-xs text-[#888888]">
+                      SEARCHING_WEB...
+                    </span>
+                  </div>
+                ) : pokeAroundResults.length === 0 ? (
+                  <div className="py-2">
+                    <span className="font-terminal text-xs text-[#555555]">
+                      NO_RESULTS_FOUND
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {pokeAroundResults.map((result) => (
+                      <a
+                        key={`${result.source}-${result.id}`}
+                        href={result.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block p-3 bg-[#111113] border border-[#2a2a30] hover:border-[#ffb000] transition-none"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          {/* Source badge */}
+                          <span className={cn(
+                            "font-terminal text-[9px] px-1.5 py-0.5 border flex items-center gap-1",
+                            result.source === "twitter" && "border-[#1DA1F2] text-[#1DA1F2]",
+                            result.source === "reddit" && "border-[#FF4500] text-[#FF4500]",
+                            result.source === "hackernews" && "border-[#FF6600] text-[#FF6600]"
+                          )}>
+                            {result.source === "twitter" && <XIcon />}
+                            {result.source === "reddit" && <RedditIcon />}
+                            {result.source === "hackernews" && <HNIcon />}
+                            {result.source.toUpperCase()}
+                          </span>
+                          
+                          {/* Score */}
+                          {result.score !== undefined && result.score > 0 && (
+                            <span className="font-terminal text-[9px] text-[#555555]">
+                              ↑{result.score}
+                            </span>
+                          )}
+                          
+                          {/* Author */}
+                          {result.authorHandle && (
+                            <span className="font-terminal text-[9px] text-[#555555]">
+                              @{result.authorHandle}
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div className="font-terminal text-[11px] text-[#e6e6e6] line-clamp-2">
+                          {result.title || result.content.slice(0, 150)}
                         </div>
                       </a>
                     ))}
