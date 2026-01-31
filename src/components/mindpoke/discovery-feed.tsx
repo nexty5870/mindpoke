@@ -211,6 +211,9 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
   const [dismissedPokeIds, setDismissedPokeIds] = useState<Set<string>>(() => getDismissedPokeIds());
   const [savingPokeIds, setSavingPokeIds] = useState<Set<string>>(new Set());
   const [savedPokeIds, setSavedPokeIds] = useState<Set<string>>(new Set());
+  const [showSummary, setShowSummary] = useState(false);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
 
   const handleSave = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -325,6 +328,44 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
         next.delete(key);
         return next;
       });
+    }
+  };
+
+  const handleSummarize = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (showSummary && summary) {
+      // Toggle off if already showing
+      setShowSummary(false);
+      return;
+    }
+    
+    if (summary) {
+      // Already have summary, just show it
+      setShowSummary(true);
+      return;
+    }
+    
+    setIsLoadingSummary(true);
+    setShowSummary(true);
+    setShowSimilar(false);
+    setShowPokeAround(false);
+    
+    try {
+      const res = await fetch(`/api/discoveries/${discovery.id}/summarize`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSummary(data.data.summary);
+      } else {
+        setSummary(`Error: ${data.error}`);
+      }
+    } catch (err) {
+      console.error("Failed to summarize:", err);
+      setSummary("Failed to generate summary");
+    } finally {
+      setIsLoadingSummary(false);
     }
   };
 
@@ -524,6 +565,24 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
                     className={cn(
                       "w-4 h-4",
                       showPokeAround ? "text-[#ffb000]" : "text-[#888888]"
+                    )} 
+                  />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className={cn(
+                    "h-8 w-8 border border-transparent hover:border-[#a855f7] hover:bg-transparent",
+                    showSummary && "border-[#a855f7] bg-[#a855f7]/10"
+                  )}
+                  onClick={handleSummarize}
+                  title="AI Summary"
+                >
+                  <Icon 
+                    icon="ph:brain-bold" 
+                    className={cn(
+                      "w-4 h-4",
+                      showSummary ? "text-[#a855f7]" : "text-[#888888]"
                     )} 
                   />
                 </Button>
@@ -763,6 +822,47 @@ function DiscoveryCard({ discovery, interests, index, onUpdateStatus }: Discover
                         </div>
                       </a>
                     ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* AI Summary Panel */}
+        <AnimatePresence>
+          {showSummary && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              className="overflow-hidden border-t border-[#a855f7]/30"
+            >
+              <div className="bg-[#a855f7]/5 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Icon icon="ph:brain-bold" className="w-4 h-4 text-[#a855f7]" />
+                  <span className="font-terminal text-[10px] text-[#a855f7]">
+                    ── AI SUMMARY ──
+                  </span>
+                </div>
+
+                {isLoadingSummary ? (
+                  <div className="flex items-center gap-3 py-4">
+                    <Loader2 className="w-4 h-4 text-[#a855f7] animate-spin" />
+                    <span className="font-terminal text-xs text-[#888888]">
+                      GENERATING_SUMMARY...
+                    </span>
+                  </div>
+                ) : summary ? (
+                  <div className="font-terminal text-xs text-[#e6e6e6] leading-relaxed">
+                    {summary}
+                  </div>
+                ) : (
+                  <div className="py-2">
+                    <span className="font-terminal text-xs text-[#555555]">
+                      NO_SUMMARY_AVAILABLE
+                    </span>
                   </div>
                 )}
               </div>

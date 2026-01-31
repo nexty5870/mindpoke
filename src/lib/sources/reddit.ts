@@ -101,6 +101,48 @@ export function getSubredditsForKeywords(keywords: string[]): string[] {
   return Array.from(subreddits).slice(0, 5); // Max 5 subreddits
 }
 
+// Browser-like headers to avoid Reddit's bot detection
+const REDDIT_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  "Accept": "application/json, text/html,*/*",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Cache-Control": "no-cache",
+};
+
+/**
+ * Fetch with retry logic
+ */
+async function fetchWithRetry(url: string, retries: number = 2): Promise<Response | null> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(url, { headers: REDDIT_HEADERS });
+      
+      if (response.ok) {
+        return response;
+      }
+      
+      // If rate limited (429), wait and retry
+      if (response.status === 429 && attempt < retries) {
+        const waitTime = (attempt + 1) * 2000;
+        console.log(`[reddit] Rate limited, waiting ${waitTime}ms before retry...`);
+        await new Promise(r => setTimeout(r, waitTime));
+        continue;
+      }
+      
+      // Other errors - log and return null
+      console.error(`[reddit] Fetch failed: ${response.status} for ${url}`);
+      return null;
+    } catch (error) {
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 1000));
+        continue;
+      }
+      throw error;
+    }
+  }
+  return null;
+}
+
 /**
  * Fetch hot posts from a subreddit
  */
@@ -108,20 +150,16 @@ export async function fetchSubreddit(subreddit: string, limit: number = 25): Pro
   const url = `https://www.reddit.com/r/${subreddit}/hot.json?limit=${limit}`;
   
   try {
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mindpoke/1.0 (Discovery Agent)",
-      },
-    });
+    const response = await fetchWithRetry(url);
     
-    if (!response.ok) {
-      console.error(`[reddit] Failed to fetch r/${subreddit}: ${response.status}`);
+    if (!response) {
+      console.error(`[reddit] Failed to fetch r/${subreddit}`);
       return [];
     }
     
     const data: RedditListing = await response.json();
     
-    return data.data.children
+    const posts = data.data.children
       .filter(child => !child.data.stickied && !child.data.over_18)
       .map(child => ({
         id: child.data.id,
@@ -138,6 +176,9 @@ export async function fetchSubreddit(subreddit: string, limit: number = 25): Pro
         domain: child.data.domain,
         thumbnail: child.data.thumbnail,
       }));
+    
+    console.log(`[reddit] Fetched ${posts.length} posts from r/${subreddit}`);
+    return posts;
   } catch (error) {
     console.error(`[reddit] Error fetching r/${subreddit}:`, error);
     return [];
@@ -150,14 +191,19 @@ export async function fetchSubreddit(subreddit: string, limit: number = 25): Pro
 export async function searchReddit(keywords: string[], limit: number = 30): Promise<RedditPost[]> {
   const subreddits = getSubredditsForKeywords(keywords);
   const allPosts: RedditPost[] = [];
+  const postsPerSub = Math.ceil(limit / subreddits.length);
   
-  // Fetch from all relevant subreddits in parallel
-  const results = await Promise.all(
-    subreddits.map(sub => fetchSubreddit(sub, Math.ceil(limit / subreddits.length)))
-  );
+  console.log(`[reddit] Searching ${subreddits.length} subreddits: ${subreddits.join(", ")}`);
   
-  for (const posts of results) {
+  // Fetch sequentially with delays to avoid rate limiting
+  for (const sub of subreddits) {
+    const posts = await fetchSubreddit(sub, postsPerSub);
     allPosts.push(...posts);
+    
+    // Small delay between requests to be polite
+    if (subreddits.indexOf(sub) < subreddits.length - 1) {
+      await new Promise(r => setTimeout(r, 300));
+    }
   }
   
   // Filter by keywords
